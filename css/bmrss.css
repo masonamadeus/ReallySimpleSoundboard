@@ -1,0 +1,992 @@
+/* =================================================================== */
+/* CORE LAYOUT & THEMING
+/* =================================================================== */
+:root {
+    /* Base Color Palette */
+    --background-color: #f7fafc;
+    --panel-color: #95c7ff;
+    --accent-color: #3bb273;
+    --highlight-color: #ff914d;
+
+    /* Text Colors (Static) */
+    --primary-color: #234e70;
+    /* Dark Text */
+    --secondary-color: #cce0ec;
+    /* Light Text */
+
+    /* Dynamic Text Colors (Set by JS) */
+    --panel-color-text: #234e70;
+    --accent-color-text: #234e70;
+    --highlight-color-text: #234e70;
+    --primary-color-text: #cce0ec;
+    --background-color-text: #234e70;
+
+    /* Typography */
+    --font-family-primary: 'Wellfleet', sans-serif;
+}
+
+.accent-color {
+    background-color: var(--accent-color) !important;
+    color: var(--accent-color-text) !important;
+}
+
+.primary-color {
+    background-color: var(--primary-color) !important;
+    color: var(--primary-color-text) !important;
+}
+
+.panel-color {
+    background-color: var(--panel-color) !important;
+    color: var(--panel-color-text) !important;
+}
+
+.secondary-color {
+    background-color: var(--secondary-color) !important;
+    color: var(--secondary-color-text) !important;
+}
+
+.highlight-color {
+    background-color: var(--highlight-color) !important;
+    color: var(--highlight-color-text) !important;
+}
+
+.background-color {
+    background-color: var(--background-color) !important;
+    color: var(--background-color-text) !important;
+}
+
+/* =================================================================== */
+/* SCROLLBAR STYLING
+/* =================================================================== */
+
+/* --- Standard Firefox Styling --- */
+* {
+    scrollbar-width: thin;
+    /* "auto" or "thin" */
+    scrollbar-color: var(--accent-color) var(--secondary-color);
+    /* thumb and track */
+}
+
+/* --- WebKit (Chrome, Safari, Edge) Styling --- */
+::-webkit-scrollbar {
+    width: 10px;
+    /* Width of the entire scrollbar */
+}
+
+::-webkit-scrollbar-track {
+    background: var(--secondary-color);
+    /* The track (the part the thumb slides along) */
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: var(--accent-color);
+    /* The draggable scrolling handle */
+    border-radius: 6px;
+    /* Rounded corners on the thumb */
+    border: 2px solid var(--secondary-color);
+    /* Creates padding around the thumb */
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--highlight-color);
+    /* Color of the thumb on hover */
+}
+
+body {
+    font-family: var(--font-family-primary);
+    background-color: var(--background-color);
+    color: var(--background-color-text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 2rem;
+    box-sizing: border-box;
+    touch-action: manipulation;
+}
+
+.container {
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+#soundboard-title {
+    text-align: center;
+    cursor: text;
+    padding: 1rem;
+    transition: background-color 0.3s ease;
+}
+
+#soundboard-title:hover,
+#soundboard-title:focus {
+    background-color: var(--panel-color);
+    outline: none;
+}
+
+/* =================================================================== */
+/* BUTTONS & GENERAL CONTROLS
+/* =================================================================== */
+button {
+    font-family: var(--font-family-primary);
+    border: none;
+    cursor: pointer;
+    transition: filter 0.3s ease;
+    background-color: var(--accent-color);
+    color: var(--accent-color-text);
+    padding: 1rem;
+}
+
+#button-color-picker {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    border: 2px solid var(--primary-color);
+    background-color: transparent;
+    cursor: pointer;
+}
+
+
+.title-and-color {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.title-and-color input[type="text"] {
+    flex-grow: 1;
+    /* Allows the text input to fill available space */
+}
+
+button:hover {
+    filter: brightness(90%);
+}
+
+.danger {
+    background-color: #d9534f !important;
+    /* A consistent red for danger actions */
+    color: white !important;
+    padding: 1rem;
+}
+
+.slider-group {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.slider-group label {
+    width: 60px;
+    font-size: 0.875rem;
+    color: var(--panel-color-text);
+}
+
+input[type="range"] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--secondary-color);
+    outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent-color);
+    cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--accent-color);
+    cursor: pointer;
+}
+
+/* =================================================================== */
+/* GRIDS & CARDS
+/* =================================================================== */
+.soundboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 1.5rem;
+}
+
+.sound-card {
+    background-color: var(--panel-color);
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    align-self: start;
+    align-items: center;
+    box-sizing: border-box;
+}
+
+.hover-glow {
+    box-shadow: 0px 0px 20px var(--highlight-color) !important;
+}
+
+/* --- Drag & Drop Styles --- */
+.soundboard-grid.rearrange-mode {
+    cursor: grab;
+}
+
+.soundboard-grid.rearrange-mode .sound-card {
+    transform: rotate(1deg);
+    border: 2px solid var(--highlight-color);
+    cursor: grab;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.soundboard-grid.rearrange-mode .sound-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 8px rgba(0, 0, 0, 0.2);
+}
+
+.sound-card.dragging {
+    opacity: 0.5;
+}
+
+.soundboard-grid.rearrange-mode .sound-card.drag-over {
+    border: 2px dashed var(--highlight-color);
+    transform: scale(1.05);
+}
+
+/* =================================================================== */
+/* SOUND BUTTON CARDS
+/* =================================================================== */
+.sound-button {
+    position: relative;
+    width: 100%;
+    height: 100px;
+    background-color: var(--accent-color);
+    color: var(--accent-color-text);
+    font-size: 1.25rem;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.progress-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.2);
+    transition: width 0.1s linear;
+}
+
+.button-text {
+    position: relative;
+    z-index: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.settings-triangle-btn {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 0;
+    height: 0;
+    border-bottom: 40px solid var(--highlight-color);
+    border-left: 40px solid transparent;
+    z-index: 2;
+}
+
+.settings-triangle-btn svg {
+    position: absolute;
+    top: -30px;
+    left: 10px;
+    z-index: 3;
+    width: 20px;
+    height: 20px;
+    color: var(--highlight-color-text);
+}
+
+.sound-controls .speed-display {
+    color: var(--panel-color-text);
+}
+
+/* =================================================================== */
+/* CONTROL CARD
+/* =================================================================== */
+#control-card-actions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+}
+
+.span-two-columns {
+    grid-column: span 2;
+}
+
+.span-three-columns {
+    grid-column: span 3;
+}
+
+/* General button style within the control card */
+#control-card-actions button {
+    padding: 0.75rem;
+    font-size: 1.2rem;
+    font-weight: 500;
+    text-align: center;
+    background-color: var(--accent-color);
+    color: var(--accent-color-text);
+}
+
+/* Specific overrides for uniquely colored buttons */
+#rearrange-mode-btn {
+    background-color: var(--highlight-color) !important;
+    color: var(--highlight-color-text) !important;
+}
+
+#switch-board-btn {
+    background-color: var(--primary-color) !important;
+    color: var(--primary-color-text) !important;
+}
+
+/* =================================================================== */
+/* TIMER CARDS
+/* =================================================================== */
+
+
+.timer-title {
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    color: var(--panel-color-text);
+    border: 2px solid transparent;
+    width: 90%;
+    padding: 0.5rem;
+    transition: border-color 0.2s ease;
+}
+
+.timer-title[contenteditable="true"] {
+    background-color: var(--background-color);
+    color: var(--background-color-text);
+    border-color: var(--highlight-color);
+    outline: none;
+    cursor: text;
+}
+
+.timer-display {
+    font-size: 2.5rem;
+    font-weight: bold;
+    text-align: center;
+    position: relative;
+    padding: 0.5rem;
+    background-color: var(--panel-color);
+    color: var(--panel-color-text);
+    border: 2px solid var(--secondary-color);
+    /* Creates a darkening overlay on top of the panel color */
+    background-image: linear-gradient(rgba(0, 0, 0, 0.2), rgba(0, 0, 0, 0.2));
+    width: 90%;
+}
+
+timer-display span {
+    position: relative;
+    z-index: 1;
+}
+
+.timer-progress-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 0%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.3);
+}
+
+.timer-display.running {
+    color: var(--accent-color);
+}
+
+.timer-display.finished {
+    color: var(--highlight-color);
+}
+
+.timer-seconds-value,
+.timer-minutes-value {
+    width: 2rem;
+    /* Set a fixed width */
+    text-align: center;
+    border: 0px;
+    background-color: var(--panel-color);
+    color: var(--panel-color-text);
+    font-family: var(--font-family-primary);
+    font-size: 1rem;
+    margin: 0;
+    -moz-appearance: textfield;
+    /* Hide the Firefox spin buttons */
+}
+
+/* Hide spin buttons for WebKit browsers (Chrome, Safari) */
+.timer-seconds-value::-webkit-inner-spin-button,
+.timer-seconds-value::-webkit-outer-spin-button,
+.timer-minutes-value::-webkit-inner-spin-button,
+.timer-minutes-value::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.timer-options-toggle label,
+.timer-mode-selector label,
+.timer-sound-select label {
+    color: var(--panel-color-text);
+    user-select: none;
+}
+
+.timer-mode-selector {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin: 0.75rem;
+}
+
+.timer-options-toggle {
+    margin-bottom: 1rem;
+}
+
+.timer-sound-select {
+    margin-bottom: 1rem;
+    display: flex;
+    width: 100%;
+}
+
+.timer-end-sound,
+.timer-start-sound {
+    font-size: 1rem;
+    width: 60%;
+    margin-left: auto;
+    border: 0px;
+    font-family: var(--font-family-primary);
+    color: var(--secondary-color-text);
+    background-color: var(--secondary-color);
+}
+
+.timer-controls {
+    width: 100%;
+}
+
+.timer-controls .slider-group span {
+    min-width: 25px;
+    text-align: center;
+    color: var(--panel-color-text);
+}
+
+.timer-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+}
+
+.timer-buttons button {
+    flex-grow: 1;
+    font-weight: bold;
+    padding: 0.75rem 1.5rem;
+    background-color: var(--accent-color);
+    color: var(--accent-color-text);
+}
+
+.timer-buttons .reset-timer-btn {
+    background-color: var(--highlight-color);
+    color: var(--highlight-color-text);
+}
+
+.remove-timer-btn {
+    width: 100%;
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background-color: var(--highlight-color);
+    color: var(--highlight-color-text);
+}
+
+.timer-options-container.hidden-options {
+    display: none;
+}
+
+/* =================================================================== */
+/* NOTEPAD CARDS
+/* =================================================================== */
+.notepad-card {
+    align-self: stretch;
+    /* Allows notepad to fill vertical space, overriding .sound-card */
+}
+
+.notepad-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    width: 100%;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--secondary-color);
+}
+
+.notepad-tab,
+.add-page-btn {
+    border: 1px solid var(--secondary-color);
+    background-color: var(--background-color);
+    padding: 0.4rem;
+    cursor: pointer;
+    font-size: 0.8rem;
+}
+
+.add-page-btn {
+    margin-left: auto;
+    background-color: var(--highlight-color);
+    color: var(--highlight-color-text);
+    font: var(--font-family-primary);
+    font-weight: 800;
+}
+
+.notepad-tab-title {
+    cursor: pointer;
+    outline: none;
+    font-size: 1rem;
+    white-space: nowrap;
+    user-select: none;
+    padding-right: 0.5rem;
+}
+
+.notepad-tab.active {
+    background-color: var(--accent-color);
+    color: var(--accent-color-text);
+    font-weight: bold;
+    border-color: var(--accent-color);
+}
+
+.notepad-tab.active .notepad-tab-title {
+    cursor: text;
+}
+
+.delete-page-btn {
+    color: darkred;
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0.2rem;
+    margin-right: 0.5rem;
+    font-size: 1rem;
+}
+
+.delete-page-btn:hover {
+    background-color: rgba(0, 0, 0, 0.2);
+}
+
+.notepad-content {
+    flex-grow: 1;
+    width: 100%;
+    border: none;
+    background-color: var(--secondary-color);
+    padding: 0.5rem;
+    font-family: sans-serif;
+    font-size: 1rem;
+    color: var(--secondary-color-text);
+    resize: vertical;
+    box-sizing: border-box;
+    min-height: 150px;
+    font: var(--font-family-primary);
+}
+
+.notepad-content:focus {
+    outline: 1px solid var(--highlight-color);
+}
+
+/* =================================================================== */
+/* MODALS
+        /* =================================================================== */
+.modal,
+.confirm-modal {
+    display: none;
+    position: fixed;
+    z-index: 100;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(3px);
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-content,
+.confirm-modal-content {
+    background-color: var(--panel-color);
+    color: var(--panel-color-text);
+    padding: 2rem;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.modal-section {
+    margin-bottom: 1.5rem;
+}
+
+.modal-section h3,
+.modal-section h4 {
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid var(--secondary-color);
+    padding-bottom: 0.25rem;
+}
+
+.modal-section label {
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.modal-section input[type="text"] {
+    width: 100%;
+    padding: 0.5rem;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 1.25rem;
+    background-color: var(--background-color);
+    border: 1px solid var(--primary-color);
+    color: var(--background-color-text);
+}
+
+.modal-actions-row {
+    display: flex;
+    justify-content: space-between;
+}
+
+/* --- Specific Modal Buttons --- */
+.file-input-container label,
+.modal-actions-row button,
+#create-new-board-btn {
+    background-color: var(--accent-color);
+    color: var(--accent-color-text);
+    padding: 0.75rem 1.5rem;
+    text-align: center;
+    cursor:pointer;
+}
+
+#clear-files-btn {
+    background-color: var(--highlight-color);
+    color: var(--highlight-color-text);
+}
+
+/* --- File List --- */
+.file-list {
+    list-style: none;
+    padding: 0;
+}
+
+.file-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: var(--background-color);
+    color: var(--background-color-text);
+    font-size: 1rem;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--panel-color);
+}
+
+.file-list li a {
+    color: var(--background-color-text);
+}
+
+.file-list button {
+    background-color: var(--highlight-color);
+    color: var(--highlight-color-text);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+/* --- Checkboxes --- */
+.modal-checkbox-group label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+}
+
+.modal-checkbox-group input[type="checkbox"] {
+    appearance: none;
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 2px solid var(--primary-color);
+    cursor: pointer;
+    position: relative;
+    display: flex;
+
+}
+
+
+.modal-actions-row {
+    display: flex;
+    justify-content: space-between;
+
+}
+
+.modal-checkbox-group {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.modal-checkbox-group input[type="checkbox"]:checked {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+.modal-checkbox-group input[type="checkbox"]:checked::after {
+    content: '✔';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: var(--accent-color-text);
+    font-size: 1rem;
+}
+
+/* --- Color Pickers --- */
+.color-palette-grid {
+    display: grid;
+    /* Use 'repeat' with 'auto-fill' to create a flexible grid */
+    grid-template-columns: repeat(auto-fill, 1fr);
+    gap: 1rem;
+}
+
+.color-palette-buttons {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 5%;
+}
+
+.color-box {
+    position: relative;
+    /* This padding technique creates a square box that scales */
+    padding-top: 50%;
+    /* Let the grid control the width */
+    width: 100%;
+    height: 0;
+    border: 0px solid var(--primary-color);
+    overflow: hidden;
+}
+
+/* Style the color input to fill the entire box */
+.color-box input[type="color"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 0;
+    cursor: pointer;
+    border-radius: 0;
+    z-index: 1;
+    /* Ensure the input is above the background color */
+}
+
+/* Style the label as an overlay */
+.color-box label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    /* Make the label sit on top of the color input */
+    font-size: 100%;
+    text-align: center;
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+/* --- Confirmation Modal --- */
+.confirm-modal-content {
+    text-align: center;
+    max-width: 400px;
+}
+
+.confirm-modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.confirm-modal-actions button {
+    padding: 0.75rem 1.5rem;
+    font-weight: bold;
+}
+
+.confirm-yes-btn {
+    background-color: var(--accent-color);
+    color: var(--accent-color-text);
+}
+
+.confirm-no-btn {
+    background-color: var(--highlight-color);
+    color: var(--highlight-color-text);
+}
+
+/* =================================================================== */
+/* HELPER BUG & ACCORDION
+/* =================================================================== */
+#help-bug-btn {
+    position: fixed;
+    bottom: 1rem;
+    left: 1rem;
+    z-index: 50;
+    min-width: 30px;
+    min-height: 30px;
+    max-width: 80px;
+    max-height: 80px;
+    background: transparent;
+}
+
+.bug-moving {
+    animation: skitter 8s ease-in-out infinite;
+}
+
+.accordion-header {
+    width: 100%;
+    background-color: transparent;
+    text-align: left;
+    padding: 1rem;
+    font-size: 1.1rem;
+    font-weight: bold;
+    position: relative;
+    color: var(--panel-color-text);
+}
+
+.accordion-header::after {
+    content: '+';
+    position: absolute;
+    right: 1rem;
+    font-size: 1.5rem;
+    transition: transform 0.2s ease;
+}
+
+.accordion-header.active::after {
+    transform: rotate(45deg);
+}
+
+.accordion-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+    background-color: var(--background-color);
+    color: var(--background-color-text);
+    padding: 0 1rem;
+    white-space: pre-line;
+}
+
+.accordion-content.active {
+    max-height: 200px;
+    /* Adjust as needed */
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+@keyframes skitter {
+
+    0%,
+    100% {
+        transform: translate(0, 0) rotate(0deg);
+    }
+
+    4% {
+        transform: translate(15px, 5px) rotate(25deg);
+    }
+
+    8% {
+        transform: translate(15px, 5px) rotate(25deg);
+    }
+
+    15% {
+        transform: translate(-10px, -10px) rotate(-15deg);
+    }
+
+    18% {
+        transform: translate(-8px, -12px) rotate(-20deg);
+    }
+
+    20% {
+        transform: translate(-10px, -10px) rotate(-15deg);
+    }
+
+    28% {
+        transform: translate(20px, -5px) rotate(40deg);
+    }
+
+    35% {
+        transform: translate(20px, -5px) rotate(40deg);
+    }
+
+    50% {
+        transform: translate(-15px, 20px) rotate(-30deg);
+    }
+
+    60% {
+        transform: translate(-15px, 20px) rotate(-30deg);
+    }
+
+    63% {
+        transform: translate(-12px, 22px) rotate(-35deg);
+    }
+
+    65% {
+        transform: translate(-15px, 20px) rotate(-30deg);
+    }
+
+    75% {
+        transform: translate(10px, 10px) rotate(15deg);
+    }
+
+    85% {
+        transform: translate(10px, 10px) rotate(15deg);
+    }
+
+    95% {
+        transform: translate(2px, 2px) rotate(5deg);
+    }
+}
+
+#theme-library-list {
+    max-height: 200px;
+    /* Adjust this value as needed */
+    overflow-y: auto;
+    border: 1px solid var(--secondary-color);
+    padding: 0.5rem;
+}
+
+.theme-list-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    padding: 0.25rem;
+    font-size: 0.75rem;
+}
+
+.theme-list-buttons button {
+    margin: 0.1rem;
+}
+
+.theme-list-item-template span {
+    font-size: 2rem;
+    margin: 0;
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Bug & Moss Really Simple Soundboard",
+  "short_name": "Really Simple Soundboard",
+  "description": "A simple, feature-rich, slightly-janky, offline-capable soundboard app for broad (and pod) casting.",
+  "start_url": "./index.html",
+  "id": "./index.html",
+  "display": "standalone",
+  "background_color": "#3bb273",
+  "theme_color": "#ff914d",
+  "icons": [
+    {
+      "src": "icons/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

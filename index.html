@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+    <!-- TO DO :
+     
+        - OBS INTEGRATIONS
+        - CACHE GOOGLE FONTS
+        - LET TIMERS TRIGGER TIMERS
+    
+
+    -->
+
+<head>
+
+    <meta property="og:title" content="Bug & Moss Really Simple Soundboard">
+    <meta property="og:description"
+        content="A simple, feature-rich, fully-local, offline-capable infinite soundboard app for broad (and pod) casting.">
+    <meta property="og:image" content="https://bugandmoss.com/images/soundboardscreenshot.jpg">
+    <meta property="og:url" content="https://bugandmoss.com/soundboard.html">
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/bmrss.css">
+    <title>Soundboard | B&M Really Simple Soundboard</title>
+    
+</head>
+
+<body>
+    <!-- LE GRID OF CARDS -->
+    <div class="container">
+        <h1 id="soundboard-title" contenteditable="true">Bug & Moss Really Simple Soundboard</h1>
+
+        <div id="soundboard-grid" class="soundboard-grid">
+        </div>
+    </div>
+
+     <!-- CONFIRM ACTION MODAL -->
+    <div id="confirm-modal" class="confirm-modal">
+        <div class="confirm-modal-content">
+            <p id="confirm-modal-message"></p>
+            <div class="confirm-modal-actions">
+                <button id="confirm-yes-btn" class="confirm-yes-btn">Yes</button>
+                <button id="confirm-no-btn" class="confirm-no-btn">No</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- NOTEPAD CARD TEMPLATE -->
+
+    <template id="notepad-card-template">
+        <div class="sound-card special-function-card notepad-card">
+            <div class="notepad-tabs">
+                <button class="add-page-btn">+</button>
+            </div>
+            <textarea class="notepad-content" placeholder="Type your notes here..."></textarea>
+        </div>
+    </template>
+
+    <!-- TIMER CARD TEMPLATE -->
+
+    <template id="timer-card-template">
+        <div class="sound-card special-function-card timer-card">
+            <div class="timer-title" contenteditable="false">New Timer</div>
+            <div class="timer-display">
+                <span>00:00</span>
+                <div class="timer-progress-overlay"></div>
+            </div>
+            <div class="timer-controls">
+                <div class="timer-options-toggle">
+                    <label>
+                        <input type="checkbox" class="hide-timer-options-toggle" value="false">
+                        Lock Timer Settings
+                    </label>
+                </div>
+                <div class="timer-options-container">
+
+
+                    <div class="slider-group">
+                        <label>Minutes:</label>
+                        <input type="range" class="timer-minutes-range" min="0" max="90" value="0">
+                        <input type="number" class="timer-minutes-value" data-type="minutes" min="0" max="90" value="0">
+                    </div>
+                    <div class="slider-group">
+                        <label>Seconds:</label>
+                        <input type="range" class="timer-seconds-range" min="0" max="59" value="30">
+                        <input type="number" class="timer-seconds-value" data-type="seconds" min="0" max="59"
+                            value="30">
+                    </div>
+
+                    <div class="timer-mode-selector">
+                        <label>
+                            <input type="radio" name="timer-mode" class="timer-mode-radio" value="timer" checked> Timer
+                        </label>
+                        <label>
+                            <input type="radio" name="timer-mode" class="timer-mode-radio" value="stopwatch"> Stopwatch
+                        </label>
+                    </div>
+
+                    <div class="timer-sound-select start-sound-container">
+                        <label class="start-sound-label">Start with:</label>
+                        <select class="timer-start-sound"></select>
+                    </div>
+                    <div class="timer-sound-select end-sound-container">
+                        <label>End with:</label>
+                        <select class="timer-end-sound"></select>
+                    </div>
+                    <div class="timer-sound-select">
+                        <label>
+                            <input type="checkbox" class="timer-loop-checkbox" style="margin-right: 0.5rem;">Auto
+                            Restart
+                        </label>
+                    </div>
+                </div>
+                <div class="timer-buttons">
+                    <button class="start-pause-timer-btn">Start</button>
+                    <button class="reset-timer-btn">Reset</button>
+                </div>
+
+                <div class="timer-options-container">
+
+                    <button class="remove-timer-btn danger">Remove Timer</button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- CONTROL CARD -->
+    <div id="control-card" class="sound-card special-function-card" data-card-type="control" data-card-id="control-card"
+        style="display: none;">
+        <div id="control-card-actions">
+            <button id="add-btn-plus" title="Add a new button" class="span-two-columns">Add Sound</button>
+            <button id="add-timer-btn">Add Timer</button>
+            <button id="add-notepad-btn">Add Note</button>
+            <button id="rearrange-mode-btn" class="span-two-columns">Rearrange</button>
+            <button id="upload-config-btn">Upload</button>
+            <button id="download-config-btn">Download</button>
+            <button id="switch-board-btn" class="span-two-columns">Switch
+                Board</button>
+            <button id="cosmetics-btn">Cosmetics</button>
+            <button id="db-manager-btn">Storage</button>
+
+
+        </div>
+         <!-- CONFIGURATION FILE UPLOAD FORM -->
+        <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
+    </div>
+   
+    <!-- SOUND CARDS & SETTINGS MODAL -->
+    <template id="sound-card-template">
+        <div class="sound-card">
+            <button class="sound-button" data-action="play">
+                <div class="progress-overlay" style="width: 0%;"></div>
+                <span class="button-text"></span>
+                <div class="settings-triangle-btn" data-action="settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                    </svg>
+                </div>
+            </button>
+            <div class="sound-controls">
+                <div class="slider-group">
+                    <label>Volume</label>
+                    <input type="range" class="volume-slider" min="0" max="1" step="0.01" value="1.0"
+                        data-action="volume-change">
+                </div>
+                <div class="slider-group">
+                    <label>Speed</label>
+                    <input type="range" class="speed-slider" min="0.5" max="2" step="0.1" value="1.0"
+                        data-action="speed-change" ondblclick="this.value=1.0; this.dispatchEvent(new Event('input'))">
+                    <span class="speed-display">1.0x</span>
+                </div>
+            </div>
+        </div>
+    </template>
+    <div id="settings-modal" class="modal">
+        <div id="modal-content" class="modal-content">
+
+
+            <div class="modal-section">
+                <h3>Button Settings</h3>
+                <div class="title-and-color">
+                    <input type="color" id="button-color-picker">
+                    <input type="text" style="font-size: 1rem;" id="button-name-input">
+                </div>
+            </div>
+
+
+            <div class="modal-section">
+                <div class="modal-checkbox-group">
+                    <label>
+                        <input type="checkbox" id="shuffle-checkbox">
+                        Random
+                    </label>
+                    <label>
+                        <input type="checkbox" id="autoplay-checkbox">
+                        Autoplay
+                    </label>
+                    <label>
+                        <input type="checkbox" id="priority-checkbox">
+                        Priority
+                    </label>
+                    <label>
+                        <input type="checkbox" id="loop-checkbox">
+                        Loop
+                    </label>
+
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <h3>Audio Files</h3>
+                <div class="file-input-container">
+                    <label for="add-file-input" class="file-input-label">Add Audio File</label>
+                    <input type="file" id="add-file-input" accept="audio/*" multiple style="display: none;">
+                </div>
+                <ul id="file-list" class="file-list"></ul>
+                <div class="modal-actions-row">
+                    <button id="remove-button-modal" class="danger">Delete Button</button>
+                    <button id="clear-files-btn" class="highlight-color">Clear
+                        All</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- STORAGE/DATABASE MANAGER MODAL -->
+    <div id="db-manager-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Local Database Manager</h3>
+            </div>
+            <div class="modal-section">
+                <div id="db-stats-container">
+                    <div class="stat-line">
+                        <span>Total Buttons:</span> <span id="db-button-count">Calculating...</span>
+                    </div>
+                    <div class="stat-line">
+                        <span>IndexedDB Usage:</span> <span id="db-usage">Calculating...</span>
+                    </div>
+                    <div class="stat-line">
+                        <span>Available Quota:</span> <span id="db-quota">Calculating...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-section">
+                <h3>Stored Sounds</h3>
+                <ul id="db-file-list">
+                    <li><small>No sounds found.</small></li>
+                </ul>
+            </div>
+            <div class="modal-section">
+                <div class="modal-checkbox-group">
+                    <input type="checkbox" id="persistent-storage-checkbox">
+                    <h4>Storage Durability</h4>
+                </div>
+                <small>Recommended for offline use. Your browser may ask for permission.</small>
+            </div>
+
+            <div class="modal-section">
+            </div>
+
+            <div class="modal-section">
+                <button id="clear-database-btn" class="danger">Delete Everything & Try Again</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOARD SWITCHER MODAL -->
+
+    <div id="board-switcher-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Switch Soundboard</h3>
+            </div>
+            <div class="modal-section">
+                <ul id="board-list" class="file-list">
+                </ul>
+            </div>
+
+            <div class="modal-section" style="border-top: 1px solid var(--secondary-color); padding-top: 1.5rem;">
+                <h4>Create New Board</h4>
+                <div class="title-and-color">
+                    <input type="text" id="new-board-name-input" placeholder="New board name...">
+                    <button id="create-new-board-btn">Create</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- COSMETICS MODAL -->
+
+    <div id="cosmetics-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-section">
+                <h4>Font Selection</h4>
+                <label for="font-input">Enter a font name:</label>
+                <input type="text" id="font-input" placeholder="Wellfleet">
+                <small>You can use any font from <a href="https://fonts.google.com/" target="_blank"
+                        rel="noopener noreferrer">Google
+                        Fonts</a>.</small>
+            </div>
+            <div class="modal-section">
+                <h4>Color Palette</h4>
+                <div class="color-palette-grid">
+
+                    <div class="color-box">
+                        <input type="color" id="primary-color-picker" data-css-var="--primary-color">
+                        <label for="primary-color-picker" style="color:var(--primary-color-text)">Dark Text</label>
+                    </div>
+                    <div class="color-box">
+                        <input type="color" id="secondary-color-picker" data-css-var="--secondary-color">
+                        <label for="secondary-color-picker" style="color:var(--secondary-color-text)">Light Text</label>
+                    </div>
+                    <div class="color-box">
+                        <input type="color" id="panel-color-picker" data-css-var="--panel-color">
+                        <label for="panel-color-picker" style="color:var(--panel-color-text)">Panel</label>
+                    </div>
+                    <div class="color-box">
+                        <input type="color" id="background-color-picker" data-css-var="--background-color">
+                        <label for="background-color-picker"
+                            style="color:var(--background-color-text)">Background</label>
+                    </div>
+                    <div class="color-box">
+                        <input type="color" id="accent-color-picker" data-css-var="--accent-color">
+                        <label for="accent-color-picker" style="color:var(--accent-color-text)">Accent</label>
+                    </div>
+                    <div class="color-box">
+                        <input type="color" id="highlight-color-picker" data-css-var="--highlight-color">
+                        <label for="highlight-color-picker" style="color:var(--highlight-color-text)">Highlight</label>
+                    </div>
+
+                    <button id="delete-cosmetics-key-btn" class="danger span-three-columns">Reset Current
+                        Appearance</button>
+                </div>
+
+            </div>
+
+            <div class="modal-section">
+                <h4>Save Current Theme</h4>
+                <div class="title-and-color">
+                    <input type="text" id="save-theme-name-input" placeholder="Enter theme name...">
+                    <button id="save-theme-btn" class="accent-color" style="padding: 0.5rem 1rem;">Save</button>
+                </div>
+            </div>
+
+            <div class="modal-section">
+                <h4>My Themes</h4>
+                <ul id="theme-library-list" class="file-list">
+                    <li><small>No saved themes yet.</small></li>
+                </ul>
+            </div>
+
+            <div class="modal-section">
+                <h4>Manage Themes</h4>
+                <div class="color-palette-buttons">
+                    <button id="download-theme-btn" class="accent-color">Download Current</button>
+                    <button id="upload-theme-btn" class="highlight-color">Upload Single</button>
+                    <div>
+                        <h4>|</h4>
+                    </div>
+                    <button id="download-library-btn" class="accent-color">Download Library</button>
+                    <button id="upload-library-btn" class="highlight-color">Upload Library</button>
+
+                </div>
+                <input type="file" id="upload-theme-input" accept="application/json" style="display: none;">
+                <input type="file" id="upload-themelibrary-input" accept="application/json" style="display: none;">
+            </div>
+
+        </div>
+    </div>
+
+    <template id="theme-list-item-template">
+        <li>
+            <span class="theme-name"></span>
+            <div class="theme-list-buttons">
+                <button class="apply-theme-btn primary-color"><span>Apply</span></button>
+                <button class="download-theme-btn accent-color"><span>Download</span></button>
+                <button class="rename-theme-btn highlight-color"><span>Rename</span></button>
+                <button class="delete-theme-btn danger"><span>Delete</span></button>
+            </div>
+        </li>
+    </template>
+
+    <!-- THE HELPFUL BUG -->
+
+    <button id="help-bug-btn" title="Help">
+        <svg width="100%" height="100%" viewBox="0 0 224 240" version="1.1" xmlns="http://www.w3.org/2000/svg"
+            xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/"
+            style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
+            <g id="Layer3"></g>
+            <rect id="Artboard1" x="0" y="0" width="224" height="240" style="fill:none;" />
+            <clipPath id="_clip1">
+                <rect x="0" y="0" width="224" height="240" />
+            </clipPath>
+            <g clip-path="url(#_clip1)">
+                <g id="Layer4">
+                    <path
+                        d="M60.644,104.58c-11.256,-5.528 -12.727,-5.926 -26.493,-14.801c-13.766,-8.874 -18.652,-15.658 -20.973,-18.747"
+                        style="fill:none;stroke:#00a200;stroke-width:8.23px;" />
+                    <path
+                        d="M95.436,55.756c-13.129,-12.407 2.698,-28.163 -0.73,-38.025c-5.141,-14.784 -20.837,-13.943 -29.852,-4.11c-5.483,5.98 -8.152,13.151 -7.828,22.714"
+                        style="fill:none;stroke:#00a200;stroke-width:6.64px;" />
+                    <path
+                        d="M127.345,55.361c13.72,-11.75 -1.318,-28.262 2.589,-37.944c5.858,-14.515 21.493,-12.908 30.017,-2.645c5.184,6.241 7.499,13.533 6.708,23.07"
+                        style="fill:none;stroke:#00a200;stroke-width:6.64px;" />
+                    <path d="M57.333,140.553c-25.39,8.88 -28.701,38.481 -44.155,44.402"
+                        style="fill:none;stroke:#00a200;stroke-width:8.23px;" />
+                    <path
+                        d="M76.551,178.048c-12.254,11.196 -24.092,15.043 -26.945,27.627c-2.853,12.585 -12.143,20.721 -22.078,31.575"
+                        style="fill:none;stroke:#00a200;stroke-width:8.23px;" />
+                    <path
+                        d="M163.356,104.58c11.256,-5.528 12.727,-5.926 26.493,-14.801c13.766,-8.874 18.652,-15.658 20.973,-18.747"
+                        style="fill:none;stroke:#00a200;stroke-width:8.23px;" />
+                    <path d="M166.667,140.553c25.39,8.88 28.701,38.481 44.155,44.402"
+                        style="fill:none;stroke:#00a200;stroke-width:8.23px;" />
+                    <path
+                        d="M147.449,178.048c12.254,11.196 24.092,15.043 26.945,27.627c2.853,12.585 12.143,20.721 22.078,31.575"
+                        style="fill:none;stroke:#00a200;stroke-width:8.23px;" />
+                    <path
+                        d="M111.527,48.602c19.855,0 35.975,1.319 35.975,15.263c-0,13.945 -16.12,43.015 -35.975,43.015c-19.856,0 -35.521,-29.07 -35.521,-43.015c-0,-13.944 15.665,-15.263 35.521,-15.263Z"
+                        style="fill:#00a200;" />
+                    <path
+                        d="M110.517,76.417c33.618,-0 60.195,16.364 60.195,55.302c0,38.937 -26.577,85.797 -60.195,85.797c-33.618,-0 -61.263,-46.86 -61.263,-85.797c0,-38.938 27.645,-55.302 61.263,-55.302Z"
+                        style="fill:#00a200;" />
+                    <path
+                        d="M110.517,115.143l-36.286,83.255c-0,-0 13.666,19.426 37.464,19.118c21.992,-0.285 36.807,-21.893 36.807,-21.893l-37.985,-80.48Z"
+                        style="fill:#a7b700;" />
+                    <circle cx="108.983" cy="193.638" r="14.362" style="fill:#e2ff00;" />
+                    <path
+                        d="M89.067,113.981c2.248,-8.99 10.114,-17.981 22.21,-17.981c10.381,-0 20.733,6.575 21.619,19.105c0.887,12.53 -14.482,22.051 -20.679,23.6c-4.495,1.124 -4.045,11.614 -4.045,22.852"
+                        style="fill:none;stroke:#e2ff00;stroke-width:25.54px;" />
+                </g>
+            </g>
+        </svg>
+    </button>
+
+    <div id="help-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Soundboard Help & Info</h3>
+            </div>
+
+            <div class="help-accordion">
+
+                <div class="accordion-item">
+                    <button class="accordion-header active">Really Simple Overview</button>
+                    <div class="accordion-content active"><p>Welcome to the "Really Simple" Soundboard!
+
+                            I made this for the daily "morning radio" style <a href="https://bugandmoss.com/" target="_blank" rel="noopener noreferrer">podcast</a> that my wife Bug and I make, but then I got carried away...
+
+                            I think this thing is SUPER useful! Not only for podcasting, but for loads of stuff (like my friend Ty who uses it for D&D).
+
+                            The driving principle behind this project was to create a dashboard that is designed to be used WHILE recording.
+
+                            It's a simple, customizable soundboard that works in your browser and can be installed as a Progressive Web App (PWA) to use offline. (There's an install button in the section about this!)
+
+                            It's also all packed into ONE big HTML file (which I know is bad practice lol) so if you want to copy this whole thing over to your site, all you have to do is save this page.
+
+                            All of your files stay on your device - nothing is uploaded anywhere except your local browser storage!
+
+                            Initially, it was just a customizable local soundboard, but it has since grown to have different kinds of cards with various features that you can explore in the list below!
+
+                            <a href="https://github.com/masonamadeus/bugandmoss/blob/main/soundboard.html"
+                                target="_blank" rel="noopener noreferrer">Steal this, change it, use it however you'd like!</a> I don't care what you do with it, except for ONE rule: you cannot monetize it.
+
+                            (Tip: click the title at the top to change it to whatever you want!)
+
+                            Created with love by Mason Amadeus for Bug Jennett💖 (and you)
+
+                            <a href="https://bugandmoss.com/" target="_blank" rel="noopener noreferrer"><i>Listen to "Bug & Moss" every weekday morning!</i></a>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <button class="accordion-header">The Control Card</button>
+                    <div class="accordion-content"><p>This is the card with a bunch of buttons. It's the main hub for managing your soundboard.</p>
+                        <ul><li><b>Add Sound/Timer/Note:</b> Creates a new card of that type!
+                                
+                                They'll spawn immediately to the LEFT of the control card.
+
+                                (More details about each type can be found in their own dropdowns.)
+                            </li>
+                            
+                            <li><b>Rearrange:</b> Toggles rearrange mode. Click and drag cards to SWAP their positions.
+
+                                I know this is a bit of a PITA. Someday I hope to make it so you can drop cards in-between, and they'll scoot over instead of swapping. If you wanna help, this thing is <a href="https://github.com/masonamadeus/bugandmoss/blob/main/soundboard.html" target="_blank">on github</a>.
+                            </li>
+
+                            <li><b>Upload/Download:</b> Save or load your entire board configuration, INCLUDING THE SOUNDS, to a JSON file!
+
+                                It'll pop into your downloads without a popup (probably), and the title will be whatever your board title is.
+
+                                (Nerds: the files are stored as an array buffer in IndexedDB, and converted to base64 when they go into the json)
+                            </li>
+
+                            <li><b>Storage:</b> An overview of how much of your browser storage is being used, as well as a setting to toggle "storage durability" which should provide a little extra protection against accidental data loss!
+
+                                This is also where you go to delete your entire board, if you want to do that! It also deletes the associated sound files.
+                            </li>
+
+                            <li><b>Cosmetics:</b> Change the colors and font of your soundboard.
+
+                                This is probably the jankiest cosmetic menu on earth, and I'm particularly proud of the font selector lmao.
+                            </li>
+
+                            <li><b>Switch Board:</b> Switch between different soundboards, or create new ones!
+
+                                Make as many boards as you want! Just beware that I haven't tested any of this with an extreme amount of buttons/boards/data, so I have no idea what happens if it gets too big.</li>
+                                (Nerds: This works by changing the url to have a parameter named after the board name you choose, which causes a new IndexedDB database to be created. I dunno what happens if you make two boards with the same name, but it probably breaks.)
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <button class="accordion-header">Sound Buttons</button>
+                    <div class="accordion-content"><p>
+                            <b>Play a sound</b> by clicking the big button.
+
+                            <b>Stop a sound</b> by clicking the button while a sound is playing. If there are multiple files in the button, this will skip to the next file (depending on the other options explained below).
+
+                            <b>Volume</b> affects how loud the sound plays.
+
+                            <b>Speed</b> affects the playback speed of the sound. It's a bit jank, but it's pretty fun.
+
+                            <b>Edit the button</b> by clicking the colorful triangle corner in the bottom right of the button.
+
+                            Inside the settings menu you can:
+
+                            <b>Change the button color</b> using the little colored square to the left of the button title field.
+
+                            <b>Change the button name</b> by clicking on the title field and typing a new name.
+
+                            <b>Multiple sounds</b> can be added to a button. There is no limit! You can remove individual files from the list, or clear them all using labeled buttons.
+
+                            <b>Random</b> will randomly select a file from that button each time it is clicked to play.
+
+                            <b>Autoplay</b> will automatically play the next sound when the currently playing sound ends.
+
+                            <b>Priority</b> is useful for situations like playing a bumper over music. Any buttons with "Priority" will temporarly turn down any non-priority buttons until the priority sound finishes. It's auto-ducking, basically!
+
+                            <b>Loop</b> will loop whatever sound is playing, restarting it when it ends.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <button class="accordion-header">Timers</button>
+                    <div class="accordion-content"><p>Timers run a countdown, and can also trigger buttons at the start and end!
+
+                            <b>Start</b> will start the timer.
+
+                            <b>Reset</b> will stop and reset the timer to its initial time, but WILL NOT reset any other settings (like Starts & Ends With cues).
+
+                            Uncheck "Lock Timer Settings" to edit the following timer properties:
+
+                            <b>"Starts With"</b> lets you select a button to play when the timer starts.
+
+                            <b>"Ends With"</b> lets you select a button to play at the end of the timer -- with a catch!
+
+                            When you have selected an "Ends With" sound, <b><i>the timer will hit 0:00 exactly as the "Ends With" sound FINISHES playing!</b></i>
+
+                            This makes it a powerful tool for timed segments, as you can input the desired segment length and your outro cue will 'play you out' automagically!
+
+                            Sometimes this function fails to calculate the length of the end cue (I've only had it fail on mobile), and as a fallback - it will play when the timer ends. But 99% of the time, the Timer Card should end WITH the sound.
+                            
+                            The timer is pretty darn accurate, and stays running even if the tab is in the background or the page is refreshed!
+                        </p>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <button class="accordion-header">Notepads</button>
+                    <div class="accordion-content"><p>A simple place to keep notes!
+
+                            I like to use it to copy/paste URLs for articles or stuff we talk about on the show. Or to jot down stuff to talk about on future shows.
+
+                            You can even store multiple notes in a single card. Click the little "+" button to add a new tab inside the note card.
+
+                            You can edit the title of a note by clicking the text "New Note" and changing it to whatever you want.
+
+                            Other than that it's just a text box. Go crazy!
+                        </p>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <button class="accordion-header">Offline Use (PWA)</button>
+                    <div class="accordion-content"><p>This soundboard is an installable Progressive Web App (PWA).
+
+                            <b>IMPORTANT:</b> When you install this as an app, your boards will NOT transfer over automatically. You will not lose any data, but any boards you have already created will need to be downloaded from the website and then uploaded to the app.
+
+            <button id="install-pwa-btn" class="install-button-modal" disabled>Install App for Offline Use</button>
+                            <b>If the install button is greyed-out or disabled,</b> it means your browser isn't ready. Sometimes this takes a second. Try waiting a minute and reloading the page.
+
+                            If you're on mobile, you might have to go to "Share Page" and then "Add to Home Screen" (or something like that).
+                            
+                            As always, ALL of your data is stored ONLY on your device. Even if you use the website version. I don't want to pay for a server lmao.
+
+                            Your data is stored locally and can be double-protected from automatic cleanup by enabling "Storage Durability" in the Storage menu. Mobile doesn't seem to like that.
+
+                            IndexedDB is pretty robust, and doesn't tend to clear out unless you're REALLY low on space - so you probably don't even need to worry about it.
+
+                            (Tip: if you REALLY want to use this soundboard on mobile, create the boards on a computer first, download your config, email it to yourself, download it from the email on your phone, and upload the config to the mobile site/app. Badaboom, it works.)
+
+                        </p>
+                    </div>
+                </div>
+
+                <div class="modal-checkbox-group" style="margin-top: 1rem">
+                    <label>
+                        <input type="checkbox" id="toggle-bug-movement-checkbox">
+                        Hold still, Bug!
+                    </label>
+                </div>
+
+            </div>
+        </div>
+
+        <script type="module" src="js/ReallySimpleSoundboard_app.js"></script>
+</body>
+
+</html>
