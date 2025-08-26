@@ -1,6 +1,6 @@
 import { SoundboardManager } from './SoundboardManager.js';
 import { SoundboardDB } from './SoundboardDB.js';
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
 
     // --- PWA INSTALL HANDLER ---
     /** @type {Event & { prompt: () => Promise<void>, userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> }} */
@@ -43,6 +43,10 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('PWA was installed');
     });
 
-    const app = new SoundboardManager(new SoundboardDB());
+    const db = new SoundboardDB();
+    await db.openDB(); // Wait for the database to be ready and migrated
+    
+    // Now pass the opened database instance to the manager
+    const app = new SoundboardManager(db);
     app.initialize();
 });

@@ -3,7 +3,7 @@ const CACHE_NAME = 'Bug-And-Moss-Soundboard-v033';
 
 // The list of files that make up the "app shell".
 const urlsToCache = [
-  './soundboard.html',
+  './index.html',
   // Add icon files to make sure they are available offline too
   './icons/android-chrome-192x192.png',
   './icons/android-chrome-512x512.png'

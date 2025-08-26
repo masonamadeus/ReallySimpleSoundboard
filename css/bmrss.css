@@ -226,6 +226,8 @@ input[type="range"]::-moz-range-thumb {
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     align-self: start;
     align-items: center;
+    margin: auto;
+    width: 100%;
     box-sizing: border-box;
 }
 
@@ -316,6 +318,10 @@ input[type="range"]::-moz-range-thumb {
     width: 20px;
     height: 20px;
     color: var(--highlight-color-text);
+}
+
+.sound-controls {
+    width: 100%
 }
 
 .sound-controls .speed-display {

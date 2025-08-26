@@ -22,25 +22,13 @@ export class SoundboardManager {
         this.soundboardGrid = document.getElementById('soundboard-grid');
         this.controlCardElement = document.getElementById('control-card');
 
-        this.buttonsData = [];
-        this.timerCards = [];
-        this.notepadCards = [];
-        this.soundCards = new Map();
-
+        this.allCards = new Map(); // Stores all card instances, keyed by their unique ID.
         this.gridLayout = [];
         this.GRID_LAYOUT_KEY = 'grid-layout';
-        this.activeModalIndex = null;
         this.isRearranging = false;
         this.draggedItem = null;
-
         this.themeManager = new ThemeManager(this.db, new SoundboardDB('default'), this);
-
-
     }
-
-    // ================================================================
-    // Core Manager Methods
-    // ================================================================
 
     async initialize() {
         loadGoogleFonts(['Wellfleet']);
@@ -52,23 +40,139 @@ export class SoundboardManager {
 
         await this._loadBoardData();
         this.attachGlobalEventListeners();
-        this.renderGrid();
+        // The grid is rendered by _loadBoardData now
     }
 
+    // --- REFACTOR: Streamline the entire loading process ---
     async _loadBoardData() {
         await this.loadTitle();
         await this.themeManager.init();
-        await this.loadStateFromDB(); // Loads sound buttons
-        await this.loadTimers();
-        await this.loadNotepads();
         await this.initBugMovement();
-        await this.loadLayout();
 
+        // This single method now handles loading all card data and the layout.
+        await this.loadCardsAndLayout();
     }
+
+    // --- REFACTOR: New unified loading and rendering method ---
+    async loadCardsAndLayout() {
+        this.soundboardGrid.innerHTML = ''; // Clear the grid
+        this.allCards.clear(); // Clear the instance map
+
+        try {
+            // 1. Fetch all card data and the layout concurrently
+            const [allCardData, layoutData] = await Promise.all([
+                this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll'),
+                this.db.get(this.GRID_LAYOUT_KEY)
+            ]);
+
+            allCardData.forEach(cardData => {
+                let cardInstance;
+                switch (cardData.type) {
+                    case 'sound':
+                        cardInstance = new SoundCard(cardData, this, this.db);
+                        break;
+                    case 'notepad':
+                        cardInstance = new NotepadCard(cardData, this, this.db);
+                        break;
+                    case 'timer':
+                        cardInstance = new TimerCard(cardData, this, this.db);
+                        break;
+                    default:
+                        console.error(`Unknown card type: ${cardData.type}`);
+                        return;
+                }
+                this.allCards.set(cardData.id, cardInstance);
+            });
+
+            // 3. Set up the grid layout
+            if (layoutData && Array.isArray(layoutData.layout)) {
+                this.gridLayout = layoutData.layout;
+            } else {
+                // If no layout exists, create a default from the loaded cards
+                this.gridLayout = allCardData.map(cd => ({ type: cd.type, id: cd.id }));
+                this.gridLayout.push({ type: 'control', id: 'control-card' });
+                await this._saveLayout();
+            }
+
+            // 4. Render the grid based on the final layout
+            this.renderGrid();
+
+        } catch (error) {
+            console.error("Failed to load cards and layout:", error);
+        }
+    }
+
+    renderGrid() {
+        this.soundboardGrid.innerHTML = '';
+        this.gridLayout.forEach(item => {
+            let cardElement = null;
+            if (item.type === 'control') {
+                cardElement = this.controlCardElement;
+                cardElement.style.display = 'flex';
+            } else {
+                const cardInstance = this.allCards.get(item.id);
+                if (cardInstance) {
+                    cardElement = cardInstance.cardElement;
+                }
+            }
+
+            if (cardElement) {
+                this.soundboardGrid.appendChild(cardElement);
+            }
+        });
+
+        // Update timer sound selectors after all sound cards are available
+        const soundCardData = Array.from(this.allCards.values())
+            .filter(card => card instanceof SoundCard)
+            .map(card => card.data);
+
+        this.allCards.forEach(card => {
+            if (card instanceof TimerCard) {
+                card.updateTimerSoundSelectors(soundCardData);
+            }
+        });
+    }
+
+    async addCard(type, initialData = {}) {
+        const newId = `${type}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+
+        let cardData;
+
+        // Create the default data object for the new card
+        switch (type) {
+            case 'sound':
+                cardData = SoundCard.getInitialData(newId);
+                break;
+            case 'notepad':
+                cardData = NotepadCard.getInitialData(newId);
+                break;
+            case 'timer':
+                cardData = TimerCard.getInitialData(newId);
+                break;
+            default:
+                console.error(`Attempted to add unknown card type: ${type}`);
+                return;
+        }
+
+        // Add the new card's reference to the layout
+        this.gridLayout.push({ type: type, id: newId });
+
+        // Save the new card data and the updated layout
+        await Promise.all([
+            this.db.save(newId, cardData),
+            this._saveLayout()
+        ]);
+
+        // Now, reload and render the grid to reflect the new state.
+        // This is safer than trying to surgically add the new element right now.
+        await this.loadCardsAndLayout();
+    }
+
+
 
     async createNewBoard() {
         const input = document.getElementById('new-board-name-input');
-        if (input == null ){ return; }
+        if (input == null) { return; }
         const boardName = input.value.trim();
 
         if (!boardName) {
@@ -107,137 +211,9 @@ export class SoundboardManager {
         }
     }
 
-    // load the grid layout from DB or create a default.
-    async loadLayout() {
-        const layoutData = await this.db.get(this.GRID_LAYOUT_KEY);
-        if (layoutData && Array.isArray(layoutData.layout)) {
-            this.gridLayout = layoutData.layout;
-        } else {
-            this._generateDefaultLayout();
-            await this._saveLayout();
-        }
-    }
-
     // save the current grid layout to DB.
     async _saveLayout() {
         await this.db.save(this.GRID_LAYOUT_KEY, { id: this.GRID_LAYOUT_KEY, layout: this.gridLayout });
-    }
-
-    // create a default layout if none exists.
-    _generateDefaultLayout() {
-        this.gridLayout = [
-            { type: 'sound', id: 0 },
-            { type: 'sound', id: 1 },
-            { type: 'sound', id: 2 },
-            { type: 'sound', id: 3 },
-            { type: 'timer', id: 0 },
-            { type: 'control', id: 'control-card' }
-        ];
-    }
-
-    async loadNotepads() {
-        const notepadCountData = await this.db.get('notepadCount');
-        const numNotepads = notepadCountData ? notepadCountData.count : 0;
-        const notepadTemplate = document.getElementById('notepad-card-template');
-
-        for (let i = 0; i < numNotepads; i++) {
-            // Find the highest existing ID to avoid collisions
-            const existingIds = this.notepadCards.map(n => n.id);
-            const nextId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : i;
-
-            const newCard = notepadTemplate.content.cloneNode(true).querySelector('.notepad-card');
-            newCard.dataset.cardType = 'notepad';
-            newCard.dataset.cardId = nextId;
-            this.notepadCards.push(new NotepadCard(newCard, this, this.db));
-        }
-    }
-
-    // Add this new method to add a notepad
-    async addNotepad() {
-        const existingIds = this.notepadCards.map(n => n.id);
-        const nextId = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 0;
-
-        const newCard = document.getElementById('notepad-card-template').content.cloneNode(true).querySelector('.notepad-card');
-        newCard.dataset.cardType = 'notepad';
-        newCard.dataset.cardId = nextId;
-
-        this.notepadCards.push(new NotepadCard(newCard, this, this.db));
-
-        const controlCardIndex = this.gridLayout.findIndex(item => item.type === 'control');
-        this.gridLayout.splice(controlCardIndex, 0, { type: 'notepad', id: nextId });
-
-        await this.db.save('notepadCount', { id: 'notepadCount', count: this.notepadCards.length });
-        await this._saveLayout();
-        this.renderGrid();
-    }
-
-    async removeNotepad(idToRemove) {
-        const confirmed = await this.showConfirmModal('Are you sure you want to delete this note?');
-        if (!confirmed) return;
-
-        this.notepadCards = this.notepadCards.filter(n => n.id !== idToRemove);
-        this.gridLayout = this.gridLayout.filter(item => !(item.type === 'notepad' && item.id === idToRemove));
-
-        await this.db.delete(`notepad-${idToRemove}`);
-        await this.db.save('notepadCount', { id: 'notepadCount', count: this.notepadCards.length });
-        await this._saveLayout();
-        this.renderGrid();
-    }
-
-    async loadTimers() {
-        const timerCountData = await this.db.get('timerCount');
-        const numTimers = timerCountData ? timerCountData.count : 0;
-        const timerTemplate = document.getElementById('timer-card-template');
-
-        // Use Promise.all to initialize all timers in parallel for speed
-        const timerPromises = [];
-        for (let i = 0; i < numTimers; i++) {
-            const timerId = i; // This might need to be more robust if IDs aren't sequential
-            const newCard = timerTemplate.content.cloneNode(true).querySelector('.timer-card');
-            newCard.dataset.cardType = 'timer';
-            newCard.dataset.cardId = timerId;
-
-            const timerInstance = new TimerCard(newCard, this, this.db);
-            this.timerCards.push(timerInstance);
-            timerPromises.push(timerInstance.init()); // Add the init promise to the array
-        }
-        await Promise.all(timerPromises); // Wait for all timers to be initialized
-    }
-
-    async addTimer() {
-        const nextTimerIndex = this.timerCards.length > 0 ? Math.max(...this.timerCards.map(t => t.id)) + 1 : 0;
-        const newCard = document.getElementById('timer-card-template').content.cloneNode(true).querySelector('.timer-card');
-        newCard.dataset.cardType = 'timer';
-        newCard.dataset.cardId = nextTimerIndex;
-
-        const newTimer = new TimerCard(newCard, this, this.db);
-        this.timerCards.push(newTimer);
-        await newTimer.init(); // Await initialization before proceeding
-
-        const controlCardIndex = this.gridLayout.findIndex(item => item.type === 'control');
-        this.gridLayout.splice(controlCardIndex, 0, { type: 'timer', id: nextTimerIndex });
-
-        await this.db.save('timerCount', { id: 'timerCount', count: this.timerCards.length });
-        await this._saveLayout();
-        this.renderGrid();
-    }
-
-    async removeTimer(idToRemove) {
-        const confirmed = await this.showConfirmModal('Are you sure you want to delete this timer?');
-        if (!confirmed) return;
-
-        const timerInstance = this.timerCards.find(t => t.id === idToRemove);
-        if (timerInstance) {
-            timerInstance.destroy(); // Clean up the animation frame loop
-        }
-
-        this.timerCards = this.timerCards.filter(t => t.id !== idToRemove);
-        this.gridLayout = this.gridLayout.filter(item => !(item.type === 'timer' && item.id === idToRemove));
-
-        await this.db.delete(`timer-${idToRemove}`);
-        await this.db.save('timerCount', { id: 'timerCount', count: this.timerCards.length });
-        await this._saveLayout();
-        this.renderGrid();
     }
 
     // dunno if this does anything really
@@ -258,110 +234,6 @@ export class SoundboardManager {
     }
 
 
-    async loadStateFromDB() {
-        const soundData = await this.db._dbRequest(this.db.SOUNDS_STORE, 'readonly', 'getAll');
-        let configData = await this.db.get(this.db.CONFIG_KEY);
-        if (!configData) {
-            configData = { id: this.db.CONFIG_KEY, numButtons: 4 };
-            await this.db.save(configData.id, configData);
-
-            // Set the default number of timers to 1
-            await this.db.save('timerCount', { id: 'timerCount', count: 1 });
-        }
-
-        const numButtons = configData.numButtons;
-        const soundDataMap = new Map(soundData.map(item => [item.id, item]));
-
-        this.buttonsData = [];
-        for (let i = 0; i < numButtons; i++) {
-            const data = soundDataMap.get(i) || this._getInitialButtonData(i);
-            this.buttonsData.push(data);
-        }
-    }
-
-    async addButton() {
-        const nextIndex = this.buttonsData.length;
-        const newButtonData = this._getInitialButtonData(nextIndex);
-        this.buttonsData.push(newButtonData);
-
-        // Add the new button to the layout and re-render.
-        const controlCardIndex = this.gridLayout.findIndex(item => item.type === 'control');
-        if (controlCardIndex > -1) {
-            this.gridLayout.splice(controlCardIndex, 0, { type: 'sound', id: nextIndex });
-        } else {
-            this.gridLayout.push({ type: 'sound', id: nextIndex });
-        }
-
-        await this.db.save(this.db.CONFIG_KEY, { id: this.db.CONFIG_KEY, numButtons: this.buttonsData.length });
-        await this._saveLayout();
-        this.renderGrid();
-    }
-
-    async removeLastButton() {
-        if (this.buttonsData.length > 1) {
-            const lastIndex = this.buttonsData.length - 1;
-            this.buttonsData.pop();
-            if (this.players.has(lastIndex)) {
-                this.players.get(lastIndex).cleanup();
-                this.players.delete(lastIndex);
-            }
-            await this.db.delete(lastIndex);
-            await this.db.save(this.db.CONFIG_KEY, { id: this.db.CONFIG_KEY, numButtons: this.buttonsData.length });
-
-            // RRemove from layout and re-render.
-            this.gridLayout = this.gridLayout.filter(item => !(item.type === 'sound' && item.id === lastIndex));
-            await this._saveLayout();
-            this.renderGrid();
-        }
-    }
-
-    // belongs to soundcard
-    async updateButton(index, newData) {
-        this.buttonsData[index] = { ...this.buttonsData[index], ...newData };
-        await this.db.save(index, this.buttonsData[index]);
-        this.renderGrid();
-    }
-
-    // ================================================================
-    // UI Rendering Methods - will need significant revisit during refactor away from grid-based IDs to unique ones.
-    // ================================================================
-
-    renderGrid() {
-        this.soundboardGrid.innerHTML = '';
-
-        this.gridLayout.forEach(item => {
-            let cardElement = null;
-            if (item.type === 'sound') {
-                const buttonData = this.buttonsData.find(b => b.id === item.id);
-                if (buttonData) {
-                    // Create a new SoundCard instance and get its element
-                    const soundCard = new SoundCard(buttonData, this);
-                    this.soundCards.set(buttonData.id, soundCard);
-                    cardElement = soundCard.element;
-                }
-            } else if (item.type === 'timer') {
-                const timerInstance = this.timerCards.find(t => t.id === item.id);
-                if (timerInstance) {
-                    cardElement = timerInstance.cardElement;
-                }
-            } else if (item.type === 'control') {
-                cardElement = this.controlCardElement;
-                cardElement.style.display = 'flex';
-            } else if (item.type === 'notepad') {
-                const noteInstance = this.notepadCards.find(n => n.id === item.id);
-                if (noteInstance) {
-                    cardElement = noteInstance.cardElement;
-                }
-            }
-
-            if (cardElement) {
-                this.soundboardGrid.appendChild(cardElement);
-            }
-        });
-
-        this.timerCards.forEach(timer => timer.updateTimerSoundSelectors(this.buttonsData));
-    }
-
     // ================================================================
     // Event Handling -- will need a lot of cleanup after refactor is finished
     // ================================================================
@@ -381,10 +253,18 @@ export class SoundboardManager {
         this.soundboardGrid.addEventListener('drop', (e) => this.handleDrop(e));
         this.soundboardGrid.addEventListener('dragend', (e) => this.handleDragEnd(e));
 
-        document.getElementById('add-notepad-btn').addEventListener('click', () => this.addNotepad());
-        document.getElementById('add-btn-plus').addEventListener('click', () => this.addButton());
-        document.getElementById('remove-button-modal').addEventListener('click', () => this._handleRemoveButton());
-        document.getElementById('add-timer-btn').addEventListener('click', () => this.addTimer());
+        // NEW ADD CARDS METHOD
+        document.getElementById('add-sound-btn').addEventListener('click', () => {
+            this.addCard('sound');
+        });
+        document.getElementById('add-notepad-btn').addEventListener('click', () => {
+            this.addCard('notepad');
+        });
+        document.getElementById('add-timer-btn').addEventListener('click', () => {
+            this.addCard('timer');
+        });
+
+
         document.getElementById('rearrange-mode-btn').addEventListener('click', () => this.toggleRearrangeMode());
         document.getElementById('download-config-btn').addEventListener('click', () => this.downloadConfig());
         document.getElementById('upload-config-btn').addEventListener('click', () => document.getElementById('upload-config-input').click());
@@ -401,10 +281,6 @@ export class SoundboardManager {
             }
         });
 
-
-        document.getElementById('settings-modal').addEventListener('click', (event) => {
-            if (event.target.id === 'settings-modal') this.closeSettingsModal();
-        });
         document.getElementById('db-manager-modal').addEventListener('click', (event) => {
             if (event.target.id === 'db-manager-modal') this.closeDbManagerModal();
         });
@@ -416,15 +292,6 @@ export class SoundboardManager {
             // The user must do this through browser settings. This also might not work at all lol.
         });
         document.getElementById('clear-database-btn').addEventListener('click', () => this.handleClearDatabase());
-
-        document.getElementById('button-name-input').addEventListener('input', (e) => this.updateModalButtonData('name', e.target.value));
-        document.getElementById('button-color-picker').addEventListener('input', (e) => this.updateModalButtonData('color', e.target.value));
-        document.getElementById('add-file-input').addEventListener('change', (e) => this.addFilesToModalButton(e));
-        document.getElementById('clear-files-btn').addEventListener('click', () => this.clearModalButtonFiles());
-        document.getElementById('shuffle-checkbox').addEventListener('change', (e) => this.updateModalButtonData('shuffle', e.target.checked));
-        document.getElementById('autoplay-checkbox').addEventListener('change', (e) => this.updateModalButtonData('autoplay', e.target.checked));
-        document.getElementById('priority-checkbox').addEventListener('change', (e) => this.updateModalButtonData('priority', e.target.checked));
-        document.getElementById('loop-checkbox').addEventListener('change', (e) => this.updateModalButtonData('loop', e.target.checked));
 
 
         // COSMETICS MODAL LISTENERS
@@ -470,7 +337,7 @@ export class SoundboardManager {
             });
         }
     }
-    
+
     // DRAG & DROP HANDLERS ===================
     handleDragStart(event) {
         if (!this.isRearranging) return;
@@ -505,26 +372,28 @@ export class SoundboardManager {
         }
     }
 
-    async handleDrop(event) {
-        event.preventDefault();
-        if (!this.isRearranging || !this.draggedItem) return;
-        const targetCard = event.target.closest('.sound-card');
-        if (targetCard && targetCard !== this.draggedItem) {
-            const fromType = this.draggedItem.dataset.cardType;
-            const fromId = fromType === 'control' ? 'control-card' : parseInt(this.draggedItem.dataset.cardId);
-            const toType = targetCard.dataset.cardType;
-            const toId = toType === 'control' ? 'control-card' : parseInt(targetCard.dataset.cardId);
 
-            const fromIndex = this.gridLayout.findIndex(item => item.type === fromType && item.id === fromId);
-            const toIndex = this.gridLayout.findIndex(item => item.type === toType && item.id === toId);
+async handleDrop(event) {
+    event.preventDefault();
+    if (!this.isRearranging || !this.draggedItem) return;
 
-            if (fromIndex > -1 && toIndex > -1) {
-                [this.gridLayout[fromIndex], this.gridLayout[toIndex]] = [this.gridLayout[toIndex], this.gridLayout[fromIndex]];
-                await this._saveLayout();
-                this.renderGrid();
-            }
+    const targetCard = event.target.closest('.sound-card');
+    if (targetCard && targetCard !== this.draggedItem) {
+        
+        const fromId = this.draggedItem.dataset.cardId;
+        const toId = targetCard.dataset.cardId;
+
+        const fromIndex = this.gridLayout.findIndex(item => item.id === fromId);
+        const toIndex = this.gridLayout.findIndex(item => item.id === toId);
+
+        if (fromIndex > -1 && toIndex > -1) {
+            // Swap the items in the layout array
+            [this.gridLayout[fromIndex], this.gridLayout[toIndex]] = [this.gridLayout[toIndex], this.gridLayout[fromIndex]];
+            await this._saveLayout();
+            this.renderGrid(); // Re-render the grid in the new order
         }
     }
+}
 
     handleDragEnd() {
         if (this.draggedItem) {
@@ -545,184 +414,7 @@ export class SoundboardManager {
             card.setAttribute('draggable', this.isRearranging);
         });
     }
-
-    // =====================================================
-    // PLAYBACK LOGIC (WHICH SHOULD BE MOVED TO SOUNDCARD CLASS)
-    // =====================================================
-
-    handlePriorityDucking(priorityCardId) {
-        this.soundCards.forEach(card => {
-            // Duck any card that is NOT the priority card, is NOT itself a priority card, and is currently playing
-            if (card.data.id !== priorityCardId && !card.data.priority && card.player.isPlaying) {
-                // This is a simple volume drop. A fancier version could fade the volume.
-                card.player.audio.volume = card.data.volume * 0.4;
-            }
-        });
-    }
-
-    handlePriorityUnducking() {
-        // Check if any *other* priority sounds are still playing
-        const isOtherPriorityPlaying = Array.from(this.soundCards.values())
-            .some(card => card.data.priority && card.player.isPlaying);
-
-        // If no other priority sounds are playing, restore the volume on ducked cards
-        if (!isOtherPriorityPlaying) {
-            this.soundCards.forEach(card => {
-                if (!card.data.priority) {
-                    // Restore volume
-                    card.player.audio.volume = card.data.volume;
-                }
-            });
-        }
-    }
-
-    // what is this doing here? this should be handled by soundcard class
-    _getInitialButtonData(index) {
-        return {
-            id: index,
-            name: `Button ${index + 1}`,
-            color: "var(--accent-color)",
-            volume: 1.0,
-            playbackRate: 1.0,
-            shuffle: false,
-            loop: false,
-            priority: false,
-            files: []
-        };
-    }
-
     
-
-
-    // ================================================================
-    // Settings Modal Methods - These probably should ALL be moved to the soundcard class?
-    // ================================================================
-
-    openSettingsModal(index) {
-        this.activeModalIndex = index;
-        const buttonData = this.buttonsData[index];
-        const modal = document.getElementById('settings-modal');
-
-        const colorPicker = document.getElementById('button-color-picker');
-        let colorValue = this.buttonsData[index].color;
-
-        // Check if the stored color is a CSS variable
-        if (colorValue.startsWith('var(')) {
-            // Extract the variable name (e.g., '--accent-color') from the string.
-            const cssVarName = colorValue.match(/--[\w-]+/)[0];
-
-            // Get the computed style from the root element and retrieve the variable's value.
-            colorValue = getComputedStyle(document.documentElement).getPropertyValue(cssVarName).trim();
-        }
-
-        // 3. Set the color picker's value to the resolved hex code.
-        colorPicker.value = colorValue;
-
-        document.getElementById('button-name-input').value = buttonData.name;
-        document.getElementById('shuffle-checkbox').checked = buttonData.shuffle;
-        document.getElementById('autoplay-checkbox').checked = buttonData.autoplay;
-        document.getElementById('priority-checkbox').checked = buttonData.priority;
-        document.getElementById('loop-checkbox').checked = buttonData.loop;
-        this._renderFileList(buttonData.files);
-
-        modal.style.display = 'flex';
-    }
-
-    //belongs in soundcard class
-    closeSettingsModal() {
-        const modal = document.getElementById('settings-modal');
-        modal.style.display = 'none';
-        this.activeModalIndex = null;
-        this.renderGrid();
-    }
-
-    // belongs in soundcard class
-    updateModalButtonData(key, value) {
-        if (this.activeModalIndex !== null) {
-            const buttonData = this.buttonsData[this.activeModalIndex];
-            buttonData[key] = value;
-            this.updateButton(this.activeModalIndex, buttonData);
-        }
-    }
-
-
-    // Should move this to SoundCard class
-    _renderFileList(files) {
-        const fileListElement = document.getElementById('file-list');
-        fileListElement.innerHTML = ''; // Clear the list first
-
-        if (files.length === 0) {
-            const emptyItem = document.createElement('li');
-            emptyItem.innerHTML = '<small>No files added yet.</small>';
-            fileListElement.appendChild(emptyItem);
-            return;
-        }
-
-        files.forEach((file, index) => {
-            const listItem = document.createElement('li');
-            // The button is now just part of the HTML string. The single,
-            // delegated listener on the parent list will handle its click.
-            listItem.innerHTML = `
-            <span>${file.fileName}</span>
-            <button data-file-index="${index}" class="remove-file-button">Remove</button>
-        `;
-            fileListElement.appendChild(listItem);
-        });
-    }
-
-
-// should be moved to soundcard class during refactor & decouple from grid-based IDs
-    async addFilesToModalButton(event) {
-        if (this.activeModalIndex === null) return;
-        const files = event.target.files;
-        if (files.length === 0) return;
-
-        const buttonData = this.buttonsData[this.activeModalIndex];
-        // +++ ADD: Get the actual SoundCard instance +++
-        const soundCard = this.soundCards.get(this.activeModalIndex);
-
-        for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            const arrayBuffer = await file.arrayBuffer();
-            const fileData = { fileName: file.name, mimeType: file.type, arrayBuffer: arrayBuffer };
-            buttonData.files.push(fileData);
-
-            // +++ ADD: Tell the SoundCard to process the new file +++
-            if (soundCard) {
-                await soundCard._processFile(fileData);
-            }
-        }
-        await this.updateButton(this.activeModalIndex, buttonData);
-        this._renderFileList(buttonData.files);
-    }
-
-    // also need to move to soundcard class
-    async clearModalButtonFiles() {
-        const confirmed = await this.showConfirmModal("Are you sure you want to clear all audio files for this button?");
-        if (confirmed && this.activeModalIndex !== null) {
-            const buttonData = this.buttonsData[this.activeModalIndex];
-            const player = this._getAudioPlayer(this.activeModalIndex);
-            player.cleanup();
-            buttonData.files = [];
-            await this.db.save(this.activeModalIndex, buttonData);
-            this._renderFileList(buttonData.files);
-        }
-    }
-
-    // also belongs in soundcard class
-    async removeFileFromModalButton(event) {
-        const fileIndex = parseInt(event.target.dataset.fileIndex);
-        if (!isNaN(fileIndex)) {
-            const buttonData = this.buttonsData[this.activeModalIndex];
-            if (!buttonData || !buttonData.files) return;
-            const player = this._getAudioPlayer(this.activeModalIndex);
-            if (player) { player.cleanup(); }
-            buttonData.files.splice(fileIndex, 1);
-            if (buttonData.files.length > 0) { player.playback.currentFileIndex = 0; }
-            await this.db.save(this.activeModalIndex, buttonData);
-            this._renderFileList(buttonData.files);
-        }
-    }
 
     // ================================================================
     // Global Functionality Methods
@@ -753,54 +445,40 @@ export class SoundboardManager {
         modal.style.display = 'flex';
     }
 
-    // This should be in soundcard class?
-    async _handleRemoveButton() {
-        if (this.activeModalIndex === null) return;
-        const confirmed = await this.showConfirmModal("Are you sure you want to permanently remove this button?");
-        if (confirmed) {
-            await this.removeButton(this.activeModalIndex);
-        }
-    }
-
-    // This goes with the handler, probably should move into soundcard class?
-    async removeButton(indexToRemove) {
-        if (this.buttonsData.length <= 1) {
+    /**
+ * Safely removes a card from the application by its unique ID.
+ * @param {string} cardIdToRemove The unique ID of the card to be removed.
+ */
+    async removeCard(cardIdToRemove) {
+        const cardInstance = this.allCards.get(cardIdToRemove);
+        if (!cardInstance) {
+            console.error(`Attempted to remove a card that does not exist: ${cardIdToRemove}`);
             return;
         }
 
-        appEvents.dispatch('soundButtonDeleted',{deletedIndex: indexToRemove});
-
-        if (this.soundCards.has(indexToRemove)) {
-            this.soundCards.get(indexToRemove).destroy(); 
-            this.soundCards.delete(indexToRemove);
+        // 1. Clean up the card instance (e.g., stop audio, clear intervals).
+        if (typeof cardInstance.destroy === 'function') {
+            cardInstance.destroy();
         }
 
-        // Remove from layout
-        this.gridLayout = this.gridLayout.filter(item => !(item.type === 'sound' && item.id === indexToRemove));
+        // 2. Remove the card from the DOM.
+        cardInstance.cardElement.remove();
 
-        // Re-index subsequent button IDs in both data and layout
-        this.buttonsData.forEach((button, i) => {
-            if (i >= indexToRemove) button.id = i;
-        });
-        this.gridLayout.forEach(item => {
-            if (item.type === 'sound' && item.id > indexToRemove) {
-                item.id--;
-            }
-        });
+        // 3. Remove the card from our in-memory state.
+        this.allCards.delete(cardIdToRemove);
 
-        // Clear and re-write the database to maintain consistency
-        await this.db._dbRequest(this.db.SOUNDS_STORE, 'readwrite', 'clear');
-        for (const button of this.buttonsData) {
-            await this.db.save(button.id, button);
-        }
+        // 4. Update the grid layout.
+        this.gridLayout = this.gridLayout.filter(item => item.id !== cardIdToRemove);
 
-        await this.db.save(this.db.CONFIG_KEY, { id: this.db.CONFIG_KEY, numButtons: this.buttonsData.length });
+        // 5. Persist the changes to the database.
+        await this.db.delete(cardIdToRemove);
         await this._saveLayout();
 
-        this.closeSettingsModal();
-        this.renderGrid();
-    }
+        // 6. Notify other components (like Timers) that a card was removed.
+        appEvents.dispatch('cardDeleted', { deletedId: cardIdToRemove });
 
+        console.log(`Successfully removed card: ${cardIdToRemove}`);
+    }
     // We need to revisit once we have moved away from position-based IDs to event-driven interaction and unique IDs
     // We'll have to make sure our data structure works when everything is decoupled
     // Also, in the future once this is complete, we should create a way for boards saved from previous versions of the app can still upload
@@ -897,7 +575,7 @@ export class SoundboardManager {
         const dbQuotaEl = document.getElementById('db-quota');
         const dbButtonCountEl = document.getElementById('db-button-count');
 
-        const soundData = await this.db._dbRequest(this.db.SOUNDS_STORE, 'readonly', 'getAll');
+        const soundData = (await this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll')).filter(c => c.type === 'sound');
         dbButtonCountEl.textContent = soundData.length;
 
         if (navigator.storage && navigator.storage.estimate) {
@@ -912,7 +590,8 @@ export class SoundboardManager {
 
     async updateDbFileList() {
         const fileListEl = document.getElementById('db-file-list');
-        const soundData = await this.db._dbRequest(this.db.SOUNDS_STORE, 'readonly', 'getAll');
+        const soundData = (await this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll')).filter(c => c.type === 'sound');
+    
         fileListEl.innerHTML = '';
         if (soundData.length === 0) {
             fileListEl.innerHTML = '<li><small>No sounds found.</small></li>';
@@ -921,7 +600,7 @@ export class SoundboardManager {
 
         soundData.forEach(item => {
             const li = document.createElement('li');
-            li.textContent = `Button ${item.id + 1}: ${item.files.length} file(s)`;
+            li.textContent = `Button "${item.name}": ${item.files.length} file(s)`;
             fileListEl.appendChild(li);
         });
     }
@@ -988,7 +667,7 @@ export class SoundboardManager {
         });
     }
 
-    
+
 
     // Metaphorically speaking, the Helper Bug IS the SoundboardManager. She lives here <3
 

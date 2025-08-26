@@ -1,76 +1,82 @@
 import { appEvents, getContrastColor, debounce, randomButNot } from './helper-functions.js';
 import { AudioPlayer } from './AudioPlayer.js';
+import { RSSCard } from './RSSCard.js';
 
 /**
- * Represents a single sound card component in the soundboard grid.
+ * Represents a single sound card (sound button) component in the soundboard grid.
  * It SHOULD manage its own UI, state, and audio playback.
  */
 
 // NEED TO MOVE DUCKING FUNCTIONALITY IN HERE FROM SOUNDBOARDMANAGER AND MAKE THAT EVENT-DRIVEN
 
-export class SoundCard {
-    /**
-     * @param {object} buttonData - The configuration object for this sound button.
-     * @param {import('./SoundboardManager.js').SoundboardManager} soundboardManager - A reference to the main manager class.
-     */
-    constructor(buttonData, soundboardManager) {
-        this.data = buttonData;
-        this.manager = soundboardManager;
-        this.db = this.manager.db;
+export class SoundCard extends RSSCard {
+
+    static getInitialData(newId) {
+        return {
+            id: newId,
+            type: 'sound',
+            name: 'New Sound',
+            color: "var(--accent-color)",
+            volume: 1.0,
+            playbackRate: 1.0,
+            shuffle: false,
+            loop: false,
+            priority: false,
+            autoplay: false,
+            files: []
+        };
+    }
+
+    get templateId() {
+        return 'sound-card-template';
+    }
+
+    constructor(cardData, soundboardManager, dbInstance) {
+        super(cardData, soundboardManager, dbInstance)
 
         this.fileMetadata = new Map();
+
         this.data.files.forEach(fileData => this._processFile(fileData));
 
         this.player = new AudioPlayer(() => this._handlePlaybackCompletion());
 
-        this.element = this._createElement();
-
-        this._attachListeners();
-
-        this.player.progressOverlay = this.element.querySelector('.progress-overlay');
-        this.player.cardElement = this.element; // The player needs a reference to the whole card for the glow effect
+        this.boundHandleOutsideClick = (event) => {
+            if (event.target === this.settingsModal) {
+                this.closeModal();
+            }
+        };
 
         this.boundDurationRequestHandler = this._handleSoundDurationRequest.bind(this);
-        appEvents.on('request:soundDuration', this.boundDurationRequestHandler);
-
         this.boundDataRequestHandler = this._handleDataRequest.bind(this);
-        appEvents.on('request:soundData', this.boundDataRequestHandler);
-
         this.boundTogglePlayHandler = this._handleTogglePlayRequest.bind(this);
-        appEvents.on('sound:togglePlay', this.boundTogglePlayHandler);
-
         this.boundNextSoundInfoHandler = this._handleNextSoundInfoRequest.bind(this);
-        appEvents.on('request:nextSoundInfo', this.boundNextSoundInfoHandler);
-    }
+        this.boundPriorityPlayHandler = this._handlePriorityPlay.bind(this);
+        this.boundPriorityStopHandler = this._handlePriorityStop.bind(this);
 
-    _createElement() {
-        /** @type {HTMLTemplateElement} */
-        const template = document.getElementById('sound-card-template');
-        // @ts-ignore
-        const card = template.content.firstElementChild.cloneNode(true);
+        this.speedDisplay = this.cardElement.querySelector('.speed-display');
+        this.player.progressOverlay = this.cardElement.querySelector('.progress-overlay');
+        this.player.cardElement = this.cardElement; // The player needs a reference to the whole card for the glow effect
 
-        // --- Populate the template with data ---
-        card.dataset.cardType = 'sound';
-        card.dataset.cardId = this.data.id;
-        card.setAttribute('draggable', this.manager.isRearranging);
 
-        // @ts-ignore
-        const button = card.querySelector('.sound-button');
-        button.style.backgroundColor = this.data.color;
-        button.style.color = getContrastColor(this.data.color);
+        // The modal is now found within the card's own element structure.
+        this.settingsModal = this.cardElement.querySelector('.sound-settings-modal');
+        this.fileListElement = this.settingsModal.querySelector('.file-list');
 
-        card.querySelector('.button-text').textContent = this.data.name;
-        
-        card.querySelector('.volume-slider').value = this.data.volume;
-        
-        card.querySelector('.speed-slider').value = this.data.playbackRate;
-        card.querySelector('.speed-display').textContent = `${this.data.playbackRate.toFixed(1)}x`;
-
-        return card;
+        this._attachListeners();
+        this.updateUI();
     }
 
     _attachListeners() {
-        this.element.addEventListener('click', (event) => {
+
+        appEvents.on('request:soundDuration', this.boundDurationRequestHandler);
+        appEvents.on('request:soundData', this.boundDataRequestHandler);
+        appEvents.on('sound:togglePlay', this.boundTogglePlayHandler);
+        appEvents.on('request:nextSoundInfo', this.boundNextSoundInfoHandler);
+        appEvents.on('sound:priorityPlayStarted', this.boundPriorityPlayHandler);
+        appEvents.on('sound:priorityPlayEnded', this.boundPriorityStopHandler);
+
+
+        this.cardElement.addEventListener('click', (event) => {
             const actionElement = event.target.closest('[data-action]');
             if (!actionElement) return;
 
@@ -80,38 +86,40 @@ export class SoundCard {
                     this.togglePlay(); // Calls its own method
                     break;
                 case 'settings':
-                    this.manager.openSettingsModal(this.data.id);
+                    this.openSettings();
                     break;
             }
         });
 
-        this.element.addEventListener('input', debounce((event) => {
+        this.cardElement.addEventListener('input', debounce((event) => {
             const target = event.target;
             if (!(target instanceof HTMLInputElement)) return;
 
             const action = target.dataset.action;
             const value = parseFloat(target.value);
-
+            // ...
             switch (action) {
                 case 'volume-change':
-                    this.data.volume = value;
-                    this.player.audio.volume = value;
+                    // OLD: this.data.volume = value;
+                    // OLD: this.player.audio.volume = value;
+                    this.player.audio.volume = value; // Apply the change immediately
+                    this.updateData({ volume: value }); // Use our helper to save
                     break;
                 case 'speed-change':
-                    this.data.playbackRate = value;
-                    this.player.audio.playbackRate = value;
-                    const speedDisplay = this.element.querySelector('.speed-display');
-                    if (speedDisplay) {
-                        speedDisplay.textContent = `${value.toFixed(1)}x`;
-                    }
+                    // OLD: this.data.playbackRate = value;
+                    // OLD: this.player.audio.playbackRate = value;
+                    this.player.audio.playbackRate = value; // Apply the change immediately
+                    this.speedDisplay.textContent = `${value.toFixed(1)}x`;
+
+                    this.updateData({ playbackRate: value }); // Use our helper to save
                     break;
                 default:
                     return;
             }
-            this.db.save(this.data.id, this.data);
-        }, 250));
+        }, 50));
 
-        this.element.addEventListener('dblclick', (event) => {
+
+        this.cardElement.addEventListener('dblclick', (event) => {
             const slider = event.target.closest('input[type="range"][data-action="speed-change"]');
             if (slider instanceof HTMLInputElement) {
                 slider.value = '1.0';
@@ -120,18 +128,40 @@ export class SoundCard {
         });
     }
 
-    // A cleanup method for when the card is deleted +++
+    updateUI() {
+        const soundButton = this.cardElement.querySelector('.sound-button');
+        const buttonText = this.cardElement.querySelector('.button-text');
+        const volumeSlider = this.cardElement.querySelector('.volume-slider');
+        const speedSlider = this.cardElement.querySelector('.speed-slider');
+
+        // Set button text and color
+        buttonText.textContent = this.data.name;
+        soundButton.style.backgroundColor = this.data.color;
+
+        // Automatically set a contrasting text color for readability
+        soundButton.style.color = getContrastColor(this.data.color);
+
+        // Set slider positions
+        volumeSlider.value = this.data.volume;
+        speedSlider.value = this.data.playbackRate;
+
+        // Update the speed display text (e.g., "1.5x")
+        this.speedDisplay.textContent = `${Number(this.data.playbackRate).toFixed(1)}x`;
+    }
+
+
     destroy() {
-        // 1. Clean up the audio player (stop sounds, revoke URLs).
         this.player.cleanup();
 
-        // 2. Unsubscribe from the event bus using the stable reference.
         appEvents.off('request:soundDuration', this.boundDurationRequestHandler);
         appEvents.off('sound:togglePlay', this.boundTogglePlayHandler);
         appEvents.off('request:soundData', this.boundDataRequestHandler);
-        appEvents.on('request:nextSoundInfo', this.boundNextSoundInfoHandler);
+        appEvents.off('request:nextSoundInfo', this.boundNextSoundInfoHandler);
+        appEvents.off('sound:priorityPlayStarted', this.boundPriorityPlayHandler);
+        appEvents.off('sound:priorityPlayEnded', this.boundPriorityStopHandler);
+
     }
-    
+
 
     // LOGIC FOR ACTUAL FUNCTIONALITY
 
@@ -156,36 +186,36 @@ export class SoundCard {
 
     /**
      * Responds to a global request for sound duration if the ID matches this card.
-     * @param {{soundId: number, fileIndex: number, callback: function(number):void}} data
+     * @param {{buttonId: number, fileIndex: number, callback: function(number):void}} data
      */
-    _handleSoundDurationRequest({ soundId, fileIndex, callback }) {
+    _handleSoundDurationRequest({ buttonId, fileIndex, callback }) {
         // This is the crucial check: only the correct card will respond.
-        if (this.data.id !== soundId) {
+        if (this.data.id !== buttonId) {
             return;
         }
 
         const durationMs = this.getAudioFileDurationMs(fileIndex);
         const playbackRate = this.data.playbackRate || 1.0;
         const adjustedDuration = durationMs / playbackRate;
-        
+
         // The card itself calls the callback with the result.
         callback(adjustedDuration);
     }
 
-    _handleDataRequest({ soundId, callback }) {
+    _handleDataRequest({ buttonId, callback }) {
         // If the request is for me, I'll answer it.
-        if (this.data.id === soundId) {
+        if (this.data.id === buttonId) {
             callback(this.data);
         }
     }
 
-    _handleNextSoundInfoRequest({ soundId, callback }) {
-        if (this.data.id !== soundId) {
+    _handleNextSoundInfoRequest({ buttonId, callback }) {
+        if (this.data.id !== buttonId) {
             return; // Not for me.
         }
 
         const nextFileIndex = this._determineNextFileIndex();
-        
+
         if (nextFileIndex === null) {
             callback({ fileIndex: null, duration: 0 }); // No files to play
             return;
@@ -248,45 +278,55 @@ export class SoundCard {
 
         const fileId = `${fileData.fileName}-${fileData.arrayBuffer.byteLength}`;
         const metadata = this.fileMetadata.get(fileId);
-        
+
         // Duration is stored in seconds, so convert to ms
         return metadata ? metadata.duration * 1000 : 0;
     }
 
-    
+
     // --- NEW AUDIO LOGIC METHODS ---
 
-   _handleTogglePlayRequest({ soundId, fileIndex }) { // The fileIndex is now received here
-        if (this.data.id === soundId) {
+    _handleTogglePlayRequest({ buttonId, fileIndex }) { // The fileIndex is now received here
+        if (this.data.id === buttonId) {
             // Pass the specific index along to the main toggle method.
             this.togglePlay({ specificIndex: fileIndex });
         }
     }
 
     // Modify the togglePlay method to accept the specific index.
+    /**
+ * Handles playing or stopping the sound. This is the main user interaction point.
+ */
     togglePlay({ specificIndex = null } = {}) {
         if (this.data.files.length === 0) return;
 
+        // --- If a sound is playing, the user's click means "STOP". ---
         if (this.player.isPlaying) {
-            this.player.cleanup();
-            this._handlePlaybackCompletion();
+            this.player.cleanup(); // Stops audio and resets the progress overlay.
+
+            // If it was a priority sound, announce that it has stopped.
+            if (this.data.priority) {
+                appEvents.dispatch('sound:priorityPlayEnded', { cardId: this.data.id });
+            }
+
+            // That's it. We just stop. We don't advance the index or trigger autoplay.
+            // The currentFileIndex remains, so the next click will correctly determine the *next* file.
+            return;
+        }
+
+        // --- If no sound is playing, the user's click means "PLAY". ---
+        let indexToPlay;
+        if (specificIndex !== null) {
+            indexToPlay = specificIndex; // A specific file is requested (e.g., from a Timer)
         } else {
-            let indexToPlay;
-            // If a specific index is commanded, we MUST use it.
-            if (specificIndex !== null && specificIndex >= 0) {
-                indexToPlay = specificIndex;
-            } else {
-                // Otherwise, we use the normal logic (shuffle, loop, etc.)
-                indexToPlay = this._determineNextFileIndex();
-            }
-            
-            if (indexToPlay !== null) {
-                this.player.playback.currentFileIndex = indexToPlay;
-                this.playFile(indexToPlay);
-            }
+            indexToPlay = this._determineNextFileIndex(); // Find the next file based on settings
+        }
+
+        if (indexToPlay !== null) {
+            this.player.playback.currentFileIndex = indexToPlay; // Update our state
+            this.playFile(indexToPlay);
         }
     }
-
     playFile(fileIndex) {
         const fileData = this.data.files[fileIndex];
         if (!fileData) {
@@ -303,30 +343,203 @@ export class SoundCard {
         this.player.audio.play().catch(e => console.error("Playback error:", e));
 
         if (this.data.priority) {
-            this.manager.handlePriorityDucking(this.data.id);
+            // ANNOUNCE to all other components that a priority sound has started.
+            appEvents.dispatch('sound:priorityPlayStarted', { cardId: this.data.id });
         }
     }
 
+
+    _handlePriorityPlay({ detail: { cardId } }) {
+        // If a priority sound started, AND it's not me, AND I'm not priority, AND I'm playing...
+        if (this.data.id !== cardId && !this.data.priority && this.player.isPlaying) {
+            // ...then I should quiet down.
+            this.player.audio.volume = this.data.volume * 0.4; // Duck the volume
+        }
+    }
+
+    _handlePriorityStop() {
+        // When a priority sound stops, I can return to my normal volume.
+        // We don't need to check for other priority sounds; if another one is playing,
+        // this card would have remained ducked anyway. This is simpler and effective.
+        if (!this.data.priority) {
+            this.player.audio.volume = this.data.volume;
+        }
+    }
+
+    /**
+ * Handles what happens AFTER a sound finishes playing ON ITS OWN.
+ */
     _handlePlaybackCompletion() {
-        // This logic runs when a sound finishes or is stopped
         if (this.data.priority) {
-            this.manager.handlePriorityUnducking();
+            // Announce the priority sound has finished naturally.
+            appEvents.dispatch('sound:priorityPlayEnded', { cardId: this.data.id });
         }
 
         if (this.data.loop) {
-            this.playFile(this.player.playback.currentFileIndex);
+            this.playFile(this.player.playback.currentFileIndex); // Replay the current file
         } else if (this.data.autoplay) {
-            this.player.playback.currentFileIndex++;
-            if (this.player.playback.currentFileIndex >= this.data.files.length) {
-                this.player.playback.currentFileIndex = 0;
+            const nextFileIndex = this._determineNextFileIndex(); // Find the next file
+            if (nextFileIndex !== null) {
+                this.player.playback.currentFileIndex = nextFileIndex; // Update state
+                this.playFile(nextFileIndex); // Play it
             }
-            const nextFileIndex = this.data.shuffle
-                ? randomButNot(0, this.data.files.length, this.player.playback.currentFileIndex)
-                // @ts-ignore
-                : this.player.playback.currentFileIndex;
-            this.playFile(nextFileIndex);
-        } else {
-            this.player.playback.currentFileIndex++;
+        }
+        // If neither loop nor autoplay is on, do nothing. The sound just stops.
+    }
+
+
+    // ===================================
+    // SETTINGS MODAL METHODS
+    // ==================================
+
+    openSettings() {
+        // Populate the modal with THIS card's data
+        const colorPicker = this.settingsModal.querySelector('.button-color-picker');
+        let colorValue = this.data.color;
+        if (colorValue.startsWith('var(')) {
+            const cssVarName = colorValue.match(/--[\w-]+/)[0];
+            colorValue = getComputedStyle(document.documentElement).getPropertyValue(cssVarName).trim();
+        }
+        colorPicker.value = colorValue;
+
+        this.settingsModal.querySelector('.button-name-input').value = this.data.name;
+        this.settingsModal.querySelector('.shuffle-checkbox').checked = this.data.shuffle;
+        this.settingsModal.querySelector('.autoplay-checkbox').checked = this.data.autoplay;
+        this.settingsModal.querySelector('.priority-checkbox').checked = this.data.priority;
+        this.settingsModal.querySelector('.loop-checkbox').checked = this.data.loop;
+
+        this._renderFileList();
+        this._attachModalListeners(); // Attach listeners now that the modal is ready
+        this.settingsModal.style.display = 'flex';
+    }
+
+    closeSettings() {
+        this._removeModalListeners();
+        this.settingsModal.style.display = 'none';
+    }
+
+    _renderFileList() {
+        this.fileListElement.innerHTML = '';
+        if (this.data.files.length === 0) {
+            this.fileListElement.innerHTML = '<li><small>No files added yet.</small></li>';
+            return;
+        }
+
+        this.data.files.forEach((file, index) => {
+            const listItem = document.createElement('li');
+            listItem.innerHTML = `
+                <span>${file.fileName}</span>
+                <button data-file-index="${index}" class="remove-file-button">Remove</button>
+            `;
+            this.fileListElement.appendChild(listItem);
+        });
+    }
+
+    async _handleFileInput(event) {
+        const files = Array.from(event.target.files);
+        for (const file of files) {
+            const arrayBuffer = await file.arrayBuffer();
+            const fileData = { fileName: file.name, mimeType: file.type, arrayBuffer: arrayBuffer };
+            await this._processFile(fileData);
+            this.data.files.push(fileData);
+        }
+        await this.updateData({ files: this.data.files });
+        this._renderFileList();
+        event.target.value = ''; // Clear the input
+    }
+
+    async _handleClearFiles() {
+        const confirmed = await this.manager.showConfirmModal("Are you sure you want to clear all audio files for this button?");
+        if (confirmed) {
+            this.player.cleanup();
+            await this.updateData({ files: [] });
+            this._renderFileList();
         }
     }
+
+    async _handleRemoveFile(event) {
+        if (!event.target.classList.contains('remove-file-button')) return;
+
+        const fileIndex = parseInt(event.target.dataset.fileIndex, 10);
+        if (!isNaN(fileIndex)) {
+            this.player.cleanup(); // Stop playback if the removed file was playing
+            this.data.files.splice(fileIndex, 1);
+            await this.updateData({ files: this.data.files });
+            this._renderFileList();
+        }
+    }
+
+    _handleModalInputChange(event) {
+        const target = event.target;
+        const key = target.dataset.key;
+        if (!key) return;
+
+        const value = target.type === 'checkbox' ? target.checked : target.value;
+        this.updateData({ [key]: value });
+    }
+
+    _attachModalListeners() {
+        // --- Event handler functions ---
+        this.boundHandleModalClick = this._handleModalClick.bind(this);
+        this.boundHandleFileInput = this._handleFileInput.bind(this);
+        this.boundHandleClearFiles = this._handleClearFiles.bind(this);
+        this.boundHandleRemoveFile = this._handleRemoveFile.bind(this);
+        this.boundDeleteCard = this._handleDeleteCard.bind(this);
+
+        // This function handles all form inputs in the modal
+        this.boundHandleModalFormInput = (e) => {
+            const target = e.target;
+            // The keyMap now maps CLASS names to data properties
+            const keyMap = {
+                'button-name-input': 'name',
+                'button-color-picker': 'color',
+                'shuffle-checkbox': 'shuffle',
+                'autoplay-checkbox': 'autoplay',
+                'priority-checkbox': 'priority',
+                'loop-checkbox': 'loop'
+            };
+
+            // Find which class from our map the target element has
+            const matchingClass = Object.keys(keyMap).find(cls => target.classList.contains(cls));
+
+            if (matchingClass) {
+                // Use the found class to get the correct data property key (e.g., 'name')
+                const dataKey = keyMap[matchingClass];
+                const value = target.type === 'checkbox' ? target.checked : target.value;
+
+                this.updateData({ [dataKey]: value }).then(() => {
+                    this.updateUI(); // This will now correctly run and update the title
+                });
+            }
+        };
+
+        // --- Attach Listeners ---
+        this.settingsModal.addEventListener('click', this.boundHandleModalClick);
+        this.settingsModal.querySelector('.add-file-input').addEventListener('change', this.boundHandleFileInput);
+        this.settingsModal.querySelector('.clear-files-btn').addEventListener('click', this.boundHandleClearFiles);
+        this.settingsModal.querySelector('.delete-soundcard-btn').addEventListener('click', this.boundDeleteCard);
+        this.fileListElement.addEventListener('click', this.boundHandleRemoveFile);
+
+        // Listen for changes on any of the setting inputs
+        this.settingsModal.querySelector('.modal-content').addEventListener('input', this.boundHandleModalFormInput);
+    }
+
+    _removeModalListeners() {
+        this.settingsModal.removeEventListener('click', this.boundHandleModalClick);
+        this.settingsModal.querySelector('.add-file-input').removeEventListener('change', this.boundHandleFileInput);
+        this.settingsModal.querySelector('.clear-files-btn').removeEventListener('click', this.boundHandleClearFiles);
+        this.settingsModal.querySelector('.delete-soundcard-btn').removeEventListener('click', this.boundDeleteCard);
+        this.fileListElement.removeEventListener('click', this.boundHandleRemoveFile);
+        this.settingsModal.querySelector('.modal-content').removeEventListener('input', this.boundHandleModalFormInput);
+    }
+
+    // Helper method to close modal when clicking the backdrop
+    _handleModalClick(event) {
+        if (event.target === this.settingsModal) {
+            this.closeSettings();
+        }
+    }
+
+
+
 }

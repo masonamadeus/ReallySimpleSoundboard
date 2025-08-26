@@ -1,35 +1,49 @@
-export class NotepadCard {
-    constructor(element, soundboardManager, dbInstance) {
-        this.cardElement = element;
-        this.soundboardManager = soundboardManager;
-        this.db = dbInstance;
-        this.id = parseInt(this.cardElement.dataset.cardId);
+import { RSSCard } from "./RSSCard.js";
+
+export class NotepadCard extends RSSCard {
+
+    static getInitialData(newId) {
+        return {
+            id: newId,
+            type: 'notepad',
+            pages: [{ title: 'New Note', content: '' }],
+            currentPageIndex: 0,
+            height: '200px' // A sensible default height
+        };
+                        
+    }
+
+    constructor(cardData, soundboardManager, dbInstance) {
+        super(cardData, soundboardManager, dbInstance)
 
         // DOM Elements
+        //@ts-ignore
         this.contentElement = this.cardElement.querySelector('.notepad-content');
+        //@ts-ignore
         this.tabsContainer = this.cardElement.querySelector('.notepad-tabs');
+        //@ts-ignore
         this.addPageButton = this.cardElement.querySelector('.add-page-btn');
 
-        // state
-        this.pages = [{ title: 'New Note', content: '' }];
-        this.currentPageIndex = 0;
-        this.height = null;
-
         this.attachListeners();
-        this.loadState();
+        this.updateUI();
+    }
+
+    get templateId() {
+        return 'notepad-card-template';
     }
 
     attachListeners() {
+
         this.contentElement.addEventListener('input', () => {
-            this.pages[this.currentPageIndex].content = this.contentElement.value;
-            this.saveState();
+            this.data.pages[this.data.currentPageIndex].content = this.contentElement.value;
+            this.updateData({pages: this.data.pages})
         });
 
         this.contentElement.addEventListener('mouseup', () => {
             // Only save if a height style was actually set by resizing
             if (this.contentElement.style.height) {
-                this.height = this.contentElement.style.height;
-                this.saveState();
+                this.data.height = this.contentElement.style.height;
+                this.updateData({height: this.data.height});
             }
         });
 
@@ -53,90 +67,72 @@ export class NotepadCard {
                 const targetIndex = parseInt(tabToSwitchTo.dataset.pageIndex);
 
                 // Only switch pages if the clicked tab is not already the active one.
-                if (targetIndex !== this.currentPageIndex) {
+                if (targetIndex !== this.data.currentPageIndex) {
                     this.switchPage(targetIndex);
                 }
                 // If it IS the active tab, we do nothing, which lets you click to edit the title.
             }
         });
 
+        // renaming a tab title
         this.tabsContainer.addEventListener('input', (e) => {
             if (e.target.classList.contains('notepad-tab-title')) {
                 const tab = e.target.closest('.notepad-tab');
                 const pageIndex = parseInt(tab.dataset.pageIndex);
-                this.pages[pageIndex].title = e.target.textContent;
-                this.saveState();
+                this.data.pages[pageIndex].title = e.target.textContent;
+                this.updateData({pages: this.data.pages})
             }
         });
     }
 
-    async loadState() {
-        const state = await this.db.get(`notepad-${this.id}`);
-        if (state) {
-            this.pages = state.pages.map(p => ({ title: 'Note', content: '', ...p }));
-            this.currentPageIndex = state.currentPageIndex;
-            this.height = state.height || null; // UPDATED: Load the card's height
-        }
-        this.render();
-    }
-
-    async saveState() {
-        const state = {
-            pages: this.pages,
-            currentPageIndex: this.currentPageIndex,
-            height: this.height // UPDATED: Save the card's height
-        };
-        await this.db.save(`notepad-${this.id}`, state);
-    }
-
     addPage() {
-        this.pages.push({ title: 'New Note', content: '' });
-        this.currentPageIndex = this.pages.length - 1;
-        this.render();
-        this.saveState();
+        this.data.pages.push({ title: 'New Note', content: '' });
+        this.data.currentPageIndex = this.data.pages.length - 1;
+        this.updateUI();
+        this.updateData({pages: this.data.pages, currentPageIndex: this.data.currentPageIndex});
     }
 
 
 
     async deletePage(index) {
         // If there is more than one page, just delete the page
-        if (this.pages.length > 1) {
-            const confirm = await this.soundboardManager.showConfirmModal('Are you sure you want to delete this page?');
+        if (this.data.pages.length > 1) {
+            const confirm = await this.manager.showConfirmModal('Are you sure you want to delete this page?');
             if (!confirm) return;
 
-            this.pages.splice(index, 1);
-            if (this.currentPageIndex >= index) {
-                this.currentPageIndex = Math.max(0, this.currentPageIndex - 1);
+            this.data.pages.splice(index, 1);
+            if (this.data.currentPageIndex >= index) {
+                this.data.currentPageIndex = Math.max(0, this.data.currentPageIndex - 1);
             }
-            this.render();
-            this.saveState();
+            this.updateData({pages: this.data.pages, currentPageIndex: this.data.currentPageIndex});
+            this.updateUI();
         } else {
             // If it's the last page, delete the entire note card
-            this.soundboardManager.removeNotepad(this.id);
+            this.manager.removeCard(this.id)
         }
     }
 
     switchPage(index) {
-        if (index >= 0 && index < this.pages.length) {
-            this.currentPageIndex = index;
-            this.render();
-            this.saveState();
+        if (index >= 0 && index < this.data.pages.length) {
+            this.data.currentPageIndex = index;
+            this.updateData({currentPageIndex: this.data.currentPageIndex});
+            this.updateUI();
         }
     }
 
-    render() {
-        const currentPage = this.pages[this.currentPageIndex];
+    updateUI() {
+        const currentPage = this.data.pages[this.data.currentPageIndex];
         this.contentElement.value = currentPage.content;
 
-        if (this.height) {
-            this.contentElement.style.height = this.height;
+        if (this.data.height) {
+            this.contentElement.style.height = this.data.height;
         } else {
             this.contentElement.style.height = '';
         }
 
         this.tabsContainer.querySelectorAll('.notepad-tab').forEach(tab => tab.remove());
 
-        this.pages.forEach((page, index) => {
+        this.data.pages.forEach((page, index) => {
             const tab = document.createElement('div');
             tab.className = 'notepad-tab';
             tab.dataset.pageIndex = index;
@@ -146,7 +142,7 @@ export class NotepadCard {
             tabTitle.textContent = page.title;
 
             // UPDATED: Explicitly use strings for contentEditable for better compatibility
-            tabTitle.contentEditable = (index === this.currentPageIndex) ? 'true' : 'false';
+            tabTitle.contentEditable = (index === this.data.currentPageIndex) ? 'true' : 'false';
 
             const deleteBtn = document.createElement('span');
             deleteBtn.className = 'delete-page-btn';
@@ -156,7 +152,7 @@ export class NotepadCard {
             tab.appendChild(deleteBtn);
             tab.appendChild(tabTitle);
 
-            if (index === this.currentPageIndex) {
+            if (index === this.data.currentPageIndex) {
                 tab.classList.add('active');
             }
             this.tabsContainer.insertBefore(tab, this.addPageButton);

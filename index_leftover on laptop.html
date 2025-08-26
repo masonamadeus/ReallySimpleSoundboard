@@ -145,65 +145,88 @@
         <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
     </div>
    
-   <template id="sound-card-template">
-    <div class="sound-card">
-        <button class="sound-button" data-action="play">
-            <div class="progress-overlay" style="width: 0%;"></div>
-            <span class="button-text"></span>
-            <div class="settings-triangle-btn" data-action="settings">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
-                </svg>
-            </div>
-        </button>
-        <div class="sound-controls">
-            <div class="slider-group">
-                <label>Volume</label>
-                <input type="range" class="volume-slider" min="0" max="1" step="0.01" value="1.0" data-action="volume-change">
-            </div>
-            <div class="slider-group">
-                <label>Speed</label>
-                <input type="range" class="speed-slider" min="0.5" max="2" step="0.1" value="1.0" data-action="speed-change" ondblclick="this.value=1.0; this.dispatchEvent(new Event('input'))">
-                <span class="speed-display">1.0x</span>
+    <!-- SOUND CARDS & SETTINGS MODAL -->
+    <template id="sound-card-template">
+        <div class="sound-card">
+            <button class="sound-button" data-action="play">
+                <div class="progress-overlay" style="width: 0%;"></div>
+                <span class="button-text"></span>
+                <div class="settings-triangle-btn" data-action="settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                    </svg>
+                </div>
+            </button>
+            <div class="sound-controls">
+                <div class="slider-group">
+                    <label>Volume</label>
+                    <input type="range" class="volume-slider" min="0" max="1" step="0.01" value="1.0"
+                        data-action="volume-change">
+                </div>
+                <div class="slider-group">
+                    <label>Speed</label>
+                    <input type="range" class="speed-slider" min="0.5" max="2" step="0.1" value="1.0"
+                        data-action="speed-change" ondblclick="this.value=1.0; this.dispatchEvent(new Event('input'))">
+                    <span class="speed-display">1.0x</span>
+                </div>
             </div>
         </div>
+    </template>
 
-        <div class="modal sound-settings-modal">
-            <div class="modal-content">
+    <template id="sound-card-settings-modal-template">
+        <div id="settings-modal" class="modal">
+            <div id="modal-content" class="modal-content">
+    
+    
                 <div class="modal-section">
                     <h3>Button Settings</h3>
                     <div class="title-and-color">
-                        <input type="color" class="button-color-picker">
-                        <input type="text" style="font-size: 1rem;" class="button-name-input">
+                        <input type="color" id="button-color-picker">
+                        <input type="text" style="font-size: 1rem;" id="button-name-input">
                     </div>
                 </div>
+    
+    
                 <div class="modal-section">
                     <div class="modal-checkbox-group">
-                        <label><input type="checkbox" class="shuffle-checkbox"> Random</label>
-                        <label><input type="checkbox" class="autoplay-checkbox"> Autoplay</label>
-                        <label><input type="checkbox" class="priority-checkbox"> Priority</label>
-                        <label><input type="checkbox" class="loop-checkbox"> Loop</label>
+                        <label>
+                            <input type="checkbox" id="shuffle-checkbox">
+                            Random
+                        </label>
+                        <label>
+                            <input type="checkbox" id="autoplay-checkbox">
+                            Autoplay
+                        </label>
+                        <label>
+                            <input type="checkbox" id="priority-checkbox">
+                            Priority
+                        </label>
+                        <label>
+                            <input type="checkbox" id="loop-checkbox">
+                            Loop
+                        </label>
+    
                     </div>
                 </div>
+    
                 <div class="modal-section">
                     <h3>Audio Files</h3>
                     <div class="file-input-container">
-                        <label class="file-input-label">
-                           Add Audio File
-                           <input type="file" class="add-file-input" accept="audio/*" multiple style="display: none;">
-                        </label>
+                        <label for="add-file-input" class="file-input-label">Add Audio File</label>
+                        <input type="file" id="add-file-input" accept="audio/*" multiple style="display: none;">
                     </div>
-                    <ul class="file-list"></ul>
+                    <ul id="file-list" class="file-list"></ul>
                     <div class="modal-actions-row">
-                        <button class="delete-soundcard-btn danger">Delete Button</button>
-                        <button class="clear-files-btn highlight-color">Clear All</button>
+                        <button id="remove-button-modal" class="danger">Delete Button</button>
+                        <button id="clear-files-btn" class="highlight-color">Clear
+                            All</button>
                     </div>
                 </div>
+    
             </div>
         </div>
-    </div>
-</template>
-    
+    </template>
 
     <!-- STORAGE/DATABASE MANAGER MODAL -->
     <div id="db-manager-modal" class="modal">
