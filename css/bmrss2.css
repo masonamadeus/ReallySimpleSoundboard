@@ -55,10 +55,41 @@
     color: var(--background-color-text) !important;
 }
 
+body {
+    font-family: var(--font-family-primary);
+    background-color: var(--background-color);
+    color: var(--background-color-text);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    padding: 2rem;
+    box-sizing: border-box;
+    touch-action: manipulation;
+}
+
+.container {
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+#soundboard-title {
+    text-align: center;
+    cursor: text;
+    padding: 1rem;
+    transition: background-color 0.3s ease;
+}
+
+#soundboard-title:hover,
+#soundboard-title:focus {
+    background-color: var(--panel-color);
+    outline: none;
+}
 /* =================================================================== */
 /* SCROLLBAR STYLING
 /* =================================================================== */
-
 /* --- Standard Firefox Styling --- */
 * {
     scrollbar-width: thin;
@@ -92,39 +123,6 @@
     /* Color of the thumb on hover */
 }
 
-body {
-    font-family: var(--font-family-primary);
-    background-color: var(--background-color);
-    color: var(--background-color-text);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-height: 100vh;
-    margin: 0;
-    padding: 2rem;
-    box-sizing: border-box;
-    touch-action: manipulation;
-}
-
-.container {
-    width: 100%;
-    max-width: 1400px;
-    margin: 0 auto;
-}
-
-#soundboard-title {
-    text-align: center;
-    cursor: text;
-    padding: 1rem;
-    transition: background-color 0.3s ease;
-}
-
-#soundboard-title:hover,
-#soundboard-title:focus {
-    background-color: var(--panel-color);
-    outline: none;
-}
-
 /* =================================================================== */
 /* BUTTONS & GENERAL CONTROLS
 /* =================================================================== */
@@ -149,7 +147,6 @@ button {
     background-color: transparent;
     cursor: pointer;
 }
-
 
 .title-and-color {
     display: flex;
@@ -260,7 +257,6 @@ input[type="range"]::-moz-range-thumb {
     border: 2px dashed var(--highlight-color);
     transform: scale(1.05);
 }
-
 /* =================================================================== */
 /* SOUND BUTTON CARDS
 /* =================================================================== */
@@ -369,8 +365,6 @@ input[type="range"]::-moz-range-thumb {
 /* =================================================================== */
 /* TIMER CARDS
 /* =================================================================== */
-
-
 .timer-title {
     font-size: 1.5rem;
     font-weight: bold;
@@ -525,7 +519,6 @@ timer-display span {
 .timer-options-container.hidden-options {
     display: none;
 }
-
 /* =================================================================== */
 /* NOTEPAD CARDS
 /* =================================================================== */
@@ -611,10 +604,9 @@ timer-display span {
 .notepad-content:focus {
     outline: 1px solid var(--highlight-color);
 }
-
 /* =================================================================== */
 /* MODALS
-        /* =================================================================== */
+/* =================================================================== */
 .modal,
 .confirm-modal {
     display: none;
@@ -736,7 +728,6 @@ timer-display span {
     display: flex;
 
 }
-
 
 .modal-actions-row {
     display: flex;

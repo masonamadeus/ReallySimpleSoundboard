@@ -8,17 +8,28 @@ export class TimerCard extends RSSCard {
             id: newId,
             type: 'timer',
             title: 'New Timer',
-            targetDurationMs: 300000,
+            targetDurationMs: 30000, // Changed to 30s default
             elapsedMs: 0,
             isRunning: false,
-            endbuttonId: "",
-            startbuttonId: "",
-            hasPressedEndButton: false,
-            endSoundDuration: 0,
-            endSoundFileIndex: null,
             isLooping: false,
             mode: 'timer',
-            optionsHidden: true
+            optionsHidden: true,
+
+            // --- UNIFIED STATE OBJECTS ---
+            startAction: {
+                command: "", // The raw JSON string from the <option> value
+                durationMs: 0,
+                triggered: false
+            },
+            endAction: {
+                command: "", // The raw JSON string from the <option> value
+                durationMs: 0,
+                triggered: false
+            },
+
+            // This flag will live on the timer instance, not in the database
+            // It's temporary state for a single run.
+            // hasTriggeredEndAction: false 
         };
     }
 
@@ -26,40 +37,97 @@ export class TimerCard extends RSSCard {
         return 'timer-card-template';
     }
 
+    get commands() {
+        return [
+            { action: 'handlePlayPause', name: 'Start/Pause Timer' },
+            { action: 'reset', name: 'Reset Timer' }
+        ];
+    }
+
     constructor(cardData, soundboardManager, dbInstance) {
         super(cardData, soundboardManager, dbInstance);
 
         // TITLE AND DISPLAY
+        /** @type {HTMLElement} */
         this.timerTitle = this.cardElement.querySelector('.timer-title');
+
+        /** @type {HTMLElement} */
         this.timerDisplayContainer = this.cardElement.querySelector('.timer-display');
+
+        /** @type {HTMLSpanElement} */
         this.timerDisplay = this.timerDisplayContainer.querySelector('span');
+
+        /** @type {HTMLElement} */
+        this.timerProgressContainer = this.cardElement.querySelector('.timer-progress-container');
+
+        /** @type {HTMLElement} */
         this.timerProgressOverlay = this.cardElement.querySelector('.timer-progress-overlay');
 
         // BUTTONS
+        /** @type {HTMLButtonElement} */// START/PAUSE BUTTON
         this.startPauseBtn = this.cardElement.querySelector('.start-pause-timer-btn');
+
+        /** @type {HTMLButtonElement} */// RESET TIMER BUTTON
         this.resetBtn = this.cardElement.querySelector('.reset-timer-btn');
 
+        /** @type {HTMLInputElement} */// REMOVE TIMER BUTTON
+        this.removeTimerBtn = this.cardElement.querySelector('.remove-timer-btn');
+
         // SLIDERS & THEIR LABELS
+
+        /** @type {HTMLInputElement} */
         this.timerMinutesRange = this.cardElement.querySelector('.timer-minutes-range');
+
+        /** @type {HTMLInputElement} */
         this.timerMinutesValue = this.cardElement.querySelector('.timer-minutes-value');
+
+        /** @type {HTMLInputElement} */
         this.timerSecondsRange = this.cardElement.querySelector('.timer-seconds-range');
+
+        /** @type {HTMLInputElement} */
         this.timerSecondsValue = this.cardElement.querySelector('.timer-seconds-value');
 
         // TIMER OPTIONS SECTION
+
+        /** @type {HTMLInputElement} */
         this.hideOptionsToggle = this.cardElement.querySelector('.hide-timer-options-toggle');
+
+        /** @type {NodeListOf<HTMLElement>} */
         this.optionsContainers = this.cardElement.querySelectorAll('.timer-options-container');
 
+        /** @type {HTMLInputElement} */
+        this.loopCheckbox = this.cardElement.querySelector('.timer-loop-checkbox');
+
+        /** @type {NodeListOf<HTMLInputElement>} */
         this.modeRadios = this.cardElement.querySelectorAll('.timer-mode-radio');
         this.modeRadios.forEach(radio => {
             radio.name = `timer-mode-${this.id}`;
         });
-        this.loopCheckbox = this.cardElement.querySelector('.timer-loop-checkbox');
-        this.startSoundLabel = this.cardElement.querySelector('.start-sound-label');
-        this.timerStartSoundSelect = this.cardElement.querySelector('.timer-start-sound');
-        this.endSoundContainer = this.cardElement.querySelector('.end-sound-container');
-        this.timerEndSoundSelect = this.cardElement.querySelector('.timer-end-sound');
 
-        this.removeTimerBtn = this.cardElement.querySelector('.remove-timer-btn');
+
+        // START SOUNDS SECTION
+
+        /** @type {HTMLElement} */
+        this.startActionContainer = this.cardElement.querySelector('.start-action-container');
+
+        /** @type {HTMLLabelElement} */
+        this.startActionLabel = this.cardElement.querySelector('.start-action-label');
+
+        /** @type {HTMLSelectElement} */
+        this.timerStartActionSelect = this.cardElement.querySelector('.timer-start-action');
+
+
+        // END SOUNDS SECTION
+
+        /** @type {HTMLElement} */
+        this.endActionContainer = this.cardElement.querySelector('.end-action-container');
+
+        /** @type {HTMLLabelElement} */
+        this.endActionLabel = this.cardElement.querySelector('.end-action-label');
+
+        /** @type {HTMLSelectElement} */
+        this.timerEndSoundSelect = this.cardElement.querySelector('.timer-end-action');
+
 
         this.debouncedSave = debounce(() => this.handleControlChange(), 250);
 
@@ -71,7 +139,7 @@ export class TimerCard extends RSSCard {
     attachListeners() {
         this.startPauseBtn.addEventListener('click', () => this.handlePlayPause());
         this.resetBtn.addEventListener('click', () => this.reset());
-        this.removeTimerBtn.addEventListener('click', () => this._handleDeleteCard(this.id));
+        this.removeTimerBtn.addEventListener('click', () => this._handleDeleteCard());
 
         // debounce the sliders to prevent unnecessary database writes.
         this.timerMinutesRange.addEventListener('input', () => {
@@ -86,7 +154,7 @@ export class TimerCard extends RSSCard {
         // These don't need debouncing unless someone is using AHK to be a psychopath lol
         const immediateChangeControls = [
             this.hideOptionsToggle, this.loopCheckbox,
-            this.timerStartSoundSelect, this.timerEndSoundSelect
+            this.timerStartActionSelect, this.timerEndSoundSelect
         ];
         immediateChangeControls.forEach(el => el.addEventListener('change', () => this.handleControlChange()));
         this.modeRadios.forEach(radio => radio.addEventListener('change', () => this.handleControlChange()));
@@ -113,33 +181,38 @@ export class TimerCard extends RSSCard {
     // ================================================================
 
     startTimer() {
-        if (!this.data.isLooping) {
-            this.prepareEndSound();
-        }
-        this.updateData({ startTime: Date.now() })
+        // 1. Update the state with the current start time
+        this.updateData({ startTime: Date.now() });
 
-        if (this.data.elapsedMs === 0) { // ONLY play sound on fresh start not every click.
-            this.playStartSound();
+        // 2. Execute the start action if it exists and hasn't been triggered yet
+        const startAction = this.data.startAction;
+        if (startAction.command && !startAction.triggered) {
+            this._executeCommand(startAction.command);
+            // Update the state to mark it as triggered
+            const newStartActionState = { ...startAction, triggered: true };
+            this.updateData({ startAction: newStartActionState });
         }
+
+        // 3. Start the timer loop
         this.tick();
     }
 
     handlePlayPause() {
         const isFinished = this.data.mode === 'timer' && this.data.elapsedMs >= this.data.targetDurationMs;
 
-        // If the timer is done, the "Start" button should function as a "Reset and Start".
         if (!this.data.isRunning && isFinished) {
-            this.reset().then(() => this.startTimer()); // Chain start after reset completes
-            return;
+            this.reset();
+            // After reset, the state is now !isRunning and elapsedMs is 0,
+            // so we can just continue to the logic below to start it fresh.
         }
 
         const newIsRunning = !this.data.isRunning;
-        this.updateData({ isRunning: newIsRunning }); // Update state immediately
+        this.updateData({ isRunning: newIsRunning });
 
         if (newIsRunning) {
-            this.startTimer(); // This will set startTime and begin the tick
+            this.startTimer();
         } else {
-            // Pausing: calculate new elapsed time and cancel the animation frame
+            // Pausing
             const newElapsedMs = (this.data.elapsedMs || 0) + (Date.now() - this.data.startTime);
             cancelAnimationFrame(this.animationFrameId);
             this.updateData({ elapsedMs: newElapsedMs });
@@ -148,43 +221,47 @@ export class TimerCard extends RSSCard {
     }
 
     reset() {
-
-        const newData = {
-            isRunning: false,
-            elapsedMs: 0,
-            hasPressedEndButton: false,
-            endSoundDuration: 0
+        if (this.animationFrameId) {
+            cancelAnimationFrame(this.animationFrameId);
+            this.animationFrameId = null;
         }
 
-        this.updateData(newData);
+        // Create new, clean action objects with the 'triggered' flag reset
+        const newStartAction = { ...this.data.startAction, triggered: false };
+        const newEndAction = { ...this.data.endAction, triggered: false };
+
+        this.updateData({
+            isRunning: false,
+            elapsedMs: 0,
+            startAction: newStartAction,
+            endAction: newEndAction
+        });
+
         this.updateUI();
     }
 
     handleControlChange() {
-        // 1. Read all values from the UI controls.
+        // Read all UI values
         const minutes = parseInt(this.timerMinutesRange.value, 10);
         const seconds = parseInt(this.timerSecondsRange.value, 10);
         const newTargetDurationMs = (minutes * 60 + seconds) * 1000;
 
-        // 2. Batch all state changes into one object.
-        const newData = {
+        const newStartCommand = this.timerStartActionSelect.value;
+        const newEndCommand = this.timerEndSoundSelect.value;
+
+        // Update the simple data properties directly
+        this.updateData({
             targetDurationMs: newTargetDurationMs,
             optionsHidden: this.hideOptionsToggle.checked,
             isLooping: this.loopCheckbox.checked,
             mode: this.cardElement.querySelector('.timer-mode-radio:checked').value,
-            startbuttonId: this.timerStartSoundSelect.value,
-            endbuttonId: this.timerEndSoundSelect.value,
-        };
-
-        // 3. Update the data and then refresh the UI.
-        //    We'll call updateData directly without the broken debounce.
-        this.updateData(newData).then(() => {
-            this.updateUI();
-            // Reset the timer's progress if it's not running
-            if (!this.data.isRunning) {
-                this.reset();
-            }
         });
+
+        // Prepare the actions, which will update their own state objects
+        this._prepareAction('startAction', newStartCommand);
+        this._prepareAction('endAction', newEndCommand);
+
+        this.updateUI();
     }
 
     handleManualTimeInput(e) {
@@ -193,28 +270,40 @@ export class TimerCard extends RSSCard {
 
         if (type === 'minutes') {
             const validatedValue = isNaN(value) ? 0 : Math.max(0, Math.min(value, 90));
-            this.timerMinutesRange.value = validatedValue;
+            this.timerMinutesRange.value = String(validatedValue);
         } else if (type === 'seconds') {
             const validatedValue = isNaN(value) ? 0 : Math.max(0, Math.min(value, 59));
-            this.timerSecondsRange.value = validatedValue;
+            this.timerSecondsRange.value = String(validatedValue);
         }
 
         this._updateDisplayTextFromSliders();
         this.debouncedSave();
     }
 
-    handleButtonDeletion(deletedId) {
-        let newData = {};
-        if (this.data.startSoundId === deletedId) {
-            newData.startSoundId = ""; // The selected sound was deleted, reset to "None"
-        }
-        if (this.data.endSoundId === deletedId) {
-            newData.endSoundId = ""; // The selected sound was deleted, reset to "None"
+    handleButtonDeletion({ deletedId }) {
+        let needsUpdate = false;
+        let newStartAction = this.data.startAction;
+        let newEndAction = this.data.endAction;
+
+        if (this.data.startAction.command) {
+            const command = JSON.parse(this.data.startAction.command);
+            if (command.targetId === deletedId) {
+                newStartAction = { command: "", durationMs: 0, triggered: false };
+                needsUpdate = true;
+            }
         }
 
-        // Only update if a change is needed
-        if (Object.keys(newData).length > 0) {
-            this.updateData(newData);
+        if (this.data.endAction.command) {
+            const command = JSON.parse(this.data.endAction.command);
+            if (command.targetId === deletedId) {
+                newEndAction = { command: "", durationMs: 0, triggered: false };
+                needsUpdate = true;
+            }
+        }
+
+        if (needsUpdate) {
+            this.updateData({ startAction: newStartAction, endAction: newEndAction });
+            this.updateUI(); // Refresh the dropdowns to show "None"
         }
     }
 
@@ -225,56 +314,88 @@ export class TimerCard extends RSSCard {
     tick() {
         if (!this.data.isRunning) return;
 
-        // This calculation is for display only; no need to save it every frame.
         const currentElapsed = (this.data.elapsedMs || 0) + (Date.now() - this.data.startTime);
+        const remainingMs = this.data.targetDurationMs - currentElapsed;
 
-        if (this.data.mode === 'timer') {
-            const remainingMs = this.data.targetDurationMs - currentElapsed;
+        // --- Unified End Action Trigger Logic ---
+        const endAction = this.data.endAction;
+        if (endAction.command && !endAction.triggered && remainingMs <= endAction.durationMs) {
+            this._executeCommand(endAction.command);
 
-            // Check for end sound trigger (no state change here, just an action)
-            if (!this.data.isLooping && this.data.endbuttonId && !this.data.hasPressedEndButton && remainingMs <= this.data.endSoundDuration) {
-                this.playEndSound();
+            // Use the correct syntax to update the nested 'triggered' flag
+            const newEndActionState = { ...endAction, triggered: true };
+            this.updateData({ endAction: newEndActionState });
+        }
+
+        // --- Unified Timer Completion Logic ---
+        if (this.data.mode === 'timer' && remainingMs <= 0) {
+            if (this.data.isLooping) {
+                this.reset();
+                this.handlePlayPause(); // This will auto-start the next loop
+            } else {
+                this.updateData({ isRunning: false, elapsedMs: this.data.targetDurationMs });
+                this.updateUI();
             }
-
-            // Check for timer completion (this is a major state change)
-            if (remainingMs <= 0) {
-                if (this.data.isLooping) {
-
-                    this.updateData({
-                        elapsedMs: 0,
-                        startTime: Date.now()
-                    });
-                    this.playStartSound();
-                } else {
-
-                    this.updateData({
-                        isRunning: false,
-                        elapsedMs: this.data.targetDurationMs // Clamp to the end
-                    });
-
-                    this.updateUI();
-                    return; // Stop the animation loop
-                }
-            }
-        } else { // Stopwatch mode
-            // Check for end sound trigger
-            if (!this.data.isLooping && this.data.endbuttonId && !this.data.hasPressedEndButton && this.data.targetDurationMs > 0) {
-                const triggerTime = this.data.targetDurationMs - this.data.endSoundDuration;
-                if (currentElapsed >= triggerTime) {
-                    this.playEndSound();
-                }
-            }
+            return; // Stop the loop for this frame
         }
 
         this.renderDisplay(currentElapsed);
         this.animationFrameId = requestAnimationFrame(() => this.tick());
     }
 
+    _executeCommand(commandString) {
+        if (!commandString) return;
+        try {
+            const commandData = JSON.parse(commandString);
+            // Dispatch the clean event with only the necessary data
+            appEvents.dispatch('card:triggerAction', {
+                targetId: commandData.targetId,
+                action: commandData.action
+            });
+        } catch (e) {
+            console.error("Failed to execute command:", e);
+        }
+    }
+
+    /**
+    * Processes a command string from the UI, determines its duration, 
+    * and saves the complete action object to the database.
+    * @param {'startAction' | 'endAction'} actionType 
+    * @param {string} commandString The JSON string from the <option> value.
+    */
+    async _prepareAction(actionType, commandString) {
+        if (!commandString) {
+            return this.updateData({ [actionType]: { command: "", durationMs: 0, triggered: false } });
+        }
+
+        const command = JSON.parse(commandString);
+        let durationMs = 0;
+
+        if (command.hasDuration) {
+            const soundInfo = await new Promise(resolve => {
+                // Use the clearer event name
+                appEvents.dispatch('request:commandDuration', {
+                    buttonId: command.targetId,
+                    callback: (info) => resolve(info)
+                });
+            });
+            durationMs = soundInfo.duration;
+        }
+
+        this.updateData({
+            [actionType]: {
+                command: commandString,
+                durationMs: durationMs,
+                triggered: false
+            }
+        });
+    }
+
     updateUI() {
         // Sync UI controls with the state object
         this.timerTitle.textContent = this.data.title;
-        this.timerMinutesRange.value = Math.floor(this.data.targetDurationMs / 60000);
-        this.timerSecondsRange.value = Math.floor((this.data.targetDurationMs % 60000) / 1000);
+        this.timerMinutesRange.value = String(Math.floor(this.data.targetDurationMs / 60000));
+        this.timerSecondsRange.value = String(Math.floor((this.data.targetDurationMs % 60000) / 1000));
 
         this.timerMinutesValue.value = this.timerMinutesRange.value;
 
@@ -282,34 +403,42 @@ export class TimerCard extends RSSCard {
 
         this.hideOptionsToggle.checked = this.data.optionsHidden;
         this.loopCheckbox.checked = this.data.isLooping;
-        this.cardElement.querySelector(`.timer-mode-radio[value="${this.data.mode}"]`).checked = true;
-        this.timerStartSoundSelect.value = this.data.startbuttonId;
-        this.timerEndSoundSelect.value = this.data.endbuttonId;
+
+        /** @type {HTMLInputElement} */
+        const timerModeRadio = this.cardElement.querySelector(
+            `.timer-mode-radio[value="${this.data.mode}"]`
+        );
+
+        timerModeRadio.checked = true;
+
+
+        this.timerStartActionSelect.value = this.data.startAction.command || "";
+        this.timerEndSoundSelect.value = this.data.endAction.command || "";
 
         // Update dynamic UI elements
         this.startPauseBtn.textContent = this.data.isRunning ? 'Pause' : 'Start';
         this.startPauseBtn.style.backgroundColor = this.data.isRunning ? 'var(--primary-color)' : 'var(--accent-color)'
         this.startPauseBtn.style.color = this.data.isRunning ? 'var(--primary-color-text)' : 'var(--accent-color-text)'
         this.optionsContainers.forEach(c => c.classList.toggle('hidden-options', this.data.optionsHidden));
-        this.timerTitle.contentEditable = !this.data.optionsHidden;
-        this.endSoundContainer.style.display = this.data.isLooping ? 'none' : '';
-        this.startSoundLabel.textContent = this.data.isLooping ? 'Play Sound:' : 'Start with:';
+        this.timerTitle.contentEditable = String(!this.data.optionsHidden)
+        this.endActionContainer.style.display = this.data.isLooping ? 'none' : '';
+        this.startActionLabel.textContent = this.data.isLooping ? 'Play Sound:' : 'Start with:';
 
         this.renderDisplay();
 
     }
 
     /**
- * Updates ONLY the timer's text display based on current slider values.
- * This is lightweight and can be called rapidly without performance issues.
- */
+    * Updates ONLY the timer's text display based on current slider values.
+    * This is lightweight and can be called rapidly without performance issues.
+    */
     _updateDisplayTextFromSliders() {
         const minutes = parseInt(this.timerMinutesRange.value, 10);
         const seconds = parseInt(this.timerSecondsRange.value, 10);
         this.timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
         // Also sync the number input box next to the slider
-        this.timerMinutesValue.value = minutes;
-        this.timerSecondsValue.value = seconds;
+        this.timerMinutesValue.value = String(minutes);
+        this.timerSecondsValue.value = String(seconds);
     }
 
     renderDisplay(currentElapsed = this.data.elapsedMs) {
@@ -344,115 +473,36 @@ export class TimerCard extends RSSCard {
 
     }
 
-    updateTimerSoundSelectors(sounds) {
-        // Clear the existing options
-        this.timerStartSoundSelect.innerHTML = '<option value="">None</option>';
-        this.timerEndSoundSelect.innerHTML = '<option value="">None</option>';
+    _populateCommandSelectors(availableCommands) {
+        const startActionSelect = this.cardElement.querySelector('.timer-start-action');
+        const endActionSelect = this.cardElement.querySelector('.timer-end-action');
 
-        if (!sounds) return;
+        startActionSelect.innerHTML = '<option value="">None</option>';
+        endActionSelect.innerHTML = '<option value="">None</option>';
 
-        // Populate the dropdowns with all available sounds
-        sounds.forEach((sound) => {
-            // We'll use the button's unique ID for the value
-            if (sound.name !== "Default Name") {
-                const optionStart = new Option(sound.name, sound.id);
-                const optionEnd = new Option(sound.name, sound.id);
-                this.timerStartSoundSelect.add(optionStart);
-                this.timerEndSoundSelect.add(optionEnd);
-            }
-        });
+        availableCommands.forEach(card => {
+            if (card.cardId === this.id) return;
 
-        this.timerStartSoundSelect.value = this.data.startbuttonId;
-        this.timerEndSoundSelect.value = this.data.endbuttonId;
-    }
+            const optGroup = document.createElement('optgroup');
+            optGroup.label = `${card.cardType.toUpperCase()}: ${card.cardName}`;
 
-    validateSoundSelections(existingbuttonIds) {
-        let newData = {}
-        const startId = parseInt(this.data.startbuttonId, 10);
-        const endId = parseInt(this.data.endbuttonId, 10);
-
-        // Check if the selected start sound ID is still valid
-        if (this.data.startbuttonId && !existingbuttonIds.includes(startId)) {
-            newData.startbuttonId = ""; // Reset to "None"
-
-        }
-
-        // Check if the selected end sound ID is still valid
-        if (this.data.endbuttonId && !existingbuttonIds.includes(endId)) {
-            newData.endbuttonId = ""; // Reset to "None"
-
-        }
-
-        this.updateData(newData)
-    }
-
-    // ================================================================
-    // Sound Logic
-    // ================================================================
-
-    playStartSound() {
-        if (this.data.startbuttonId !== "") {
-            appEvents.dispatch('sound:togglePlay', {
-                buttonId: this.data.startbuttonId
-            });
-        }
-    }
-
-    playEndSound() {
-        if (this.data.endbuttonId !== "" && !this.data.hasPressedEndButton) {
-
-            appEvents.dispatch('sound:togglePlay', {
-                buttonId: this.data.endButtonId,
-                fileIndex: this.data.endSoundFileIndex
+            card.commands.forEach(command => {
+                const option = document.createElement('option');
+                option.textContent = command.name;
+                option.value = JSON.stringify({
+                    targetId: card.cardId,
+                    action: command.action,
+                    hasDuration: command.hasDuration
+                });
+                optGroup.appendChild(option);
             });
 
-            // Use updateData to persist this change
-            this.updateData({ hasPressedEndButton: true });
-        }
-    }
-
-    async prepareEndSound() {
-        this.data.hasPressedEndButton = false;
-
-        if (this.data.endbuttonId === "") {
-
-            this.updateData({
-                endSoundFileIndex: null,
-                endSoundDuration: 0,
-                hasPlayedEndSound: false
-            });
-
-            return;
-        }
-
-        const soundInfo = await new Promise(resolve => {
-            appEvents.dispatch('request:nextSoundInfo', {
-                buttonId: this.data.endButtonId,
-                callback: (info) => resolve(info)
-            });
+            startActionSelect.add(optGroup.cloneNode(true));
+            endActionSelect.add(optGroup);
         });
 
-        this.updateData({
-            endSoundFileIndex: soundInfo.fileIndex,
-            endSoundDuration: soundInfo.duration,
-            hasPlayedEndSound: false
-        });
+        startActionSelect.value = this.data.startAction.command || "";
+        endActionSelect.value = this.data.endAction.command || "";
     }
 
-    getAudioDuration(arrayBuffer) {
-        return new Promise((resolve, reject) => {
-            const blob = new Blob([arrayBuffer]);
-            const audio = new Audio();
-            const objectURL = URL.createObjectURL(blob);
-            audio.addEventListener('loadedmetadata', () => {
-                URL.revokeObjectURL(objectURL);
-                resolve(audio.duration);
-            }, { once: true });
-            audio.addEventListener('error', () => {
-                URL.revokeObjectURL(objectURL);
-                reject(new Error('Failed to load audio for duration calculation.'));
-            }, { once: true });
-            audio.src = objectURL;
-        });
-    }
 }

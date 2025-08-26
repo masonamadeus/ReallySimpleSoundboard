@@ -1,6 +1,46 @@
 import { SoundboardDB } from './SoundboardDB.js';
 
 export class BoardManager {
+    constructor() {
+        this.modal = document.getElementById('board-switcher-modal');
+        this.boardListElement = document.getElementById('board-list');
+        this._attachListeners();
+    }
+
+    _attachListeners() {
+        document.getElementById('switch-board-btn').addEventListener('click', () => this.open());
+
+        this.modal.addEventListener('click', (event) => {
+            //@ts-ignore
+            if (event.target.id === 'board-switcher-modal') {
+                this.close();
+            }
+        });
+    }
+
+    async open() {
+        const boardIds = await BoardManager.getBoardList(); // The static method is still useful
+        this.boardListElement.innerHTML = ''; // Clear previous list
+
+        if (boardIds.length === 0) {
+            this.boardListElement.innerHTML = '<li><small>No other boards found.</small></li>';
+        } else {
+            boardIds.forEach(id => {
+                const listItem = document.createElement('li');
+                const link = document.createElement('a');
+                link.textContent = id;
+                link.href = (id === 'default') ? window.location.pathname : `?board=${id}`;
+                listItem.appendChild(link);
+                this.boardListElement.appendChild(listItem);
+            });
+        }
+        this.modal.style.display = 'flex';
+    }
+
+    close() {
+        this.modal.style.display = 'none';
+    }
+
     // A helper to temporarily open a connection to the default DB
     static _getDefaultDB() {
         const db = new SoundboardDB('default');

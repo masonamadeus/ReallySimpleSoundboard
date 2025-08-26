@@ -1,3 +1,5 @@
+import { appEvents } from './helper-functions.js';
+
 export class RSSCard {
     /**
      * The constructor for all card types.
@@ -12,8 +14,21 @@ export class RSSCard {
         this.id = this.data.id;
 
         // --- Standardized Lifecycle ---
-        this.cardElement = this._createElement(); // Create the DOM element
+        this.cardElement = this._createElement();
+
+        this.boundCommandHandler = this._handleCommand.bind(this);
+        appEvents.on('card:triggerAction', this.boundCommandHandler);
     }
+
+    /**
+     * The private handler for the generic 'card:triggerAction' event.
+     */
+    _handleCommand({ targetId, action, params }) {
+        if (this.id === targetId && typeof this[action] === 'function') {
+            this[action](params); // e.g., calls this.togglePlay() on a SoundCard instance
+        }
+    }
+
 
     /**
      * A getter that child classes MUST override to provide their template ID.
@@ -21,6 +36,15 @@ export class RSSCard {
      */
     get templateId() {
         throw new Error('Child class must implement templateId getter.');
+    }
+
+    /**
+     * Returns a list of actions that can be triggered by other cards.
+     * Child classes should override this.
+     * @returns {Array<{action: string, name: string}>}
+     */
+    get commands() {
+        return []; // Default is not triggerable
     }
 
     /**

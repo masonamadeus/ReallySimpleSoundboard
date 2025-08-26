@@ -96,13 +96,13 @@
                         </label>
                     </div>
 
-                    <div class="timer-sound-select start-sound-container">
-                        <label class="start-sound-label">Start with:</label>
-                        <select class="timer-start-sound"></select>
+                    <div class="timer-sound-select start-action-container">
+                        <label class="start-action-label">Start with:</label>
+                        <select class="timer-start-action"></select>
                     </div>
-                    <div class="timer-sound-select end-sound-container">
-                        <label>End with:</label>
-                        <select class="timer-end-sound"></select>
+                    <div class="timer-sound-select end-action-container">
+                        <label class="end-action-label">End with:</label>
+                        <select class="timer-end-action"></select>
                     </div>
                     <div class="timer-sound-select">
                         <label>
@@ -163,7 +163,7 @@
             </div>
             <div class="slider-group">
                 <label>Speed</label>
-                <input type="range" class="speed-slider" min="0.5" max="2" step="0.1" value="1.0" data-action="speed-change" ondblclick="this.value=1.0; this.dispatchEvent(new Event('input'))">
+                <input type="range" class="speed-slider" min="0.5" max="2" step="0.1" value="1.0" data-action="speed-change">
                 <span class="speed-display">1.0x</span>
             </div>
         </div>
@@ -367,15 +367,17 @@
     <!-- THE HELPFUL BUG -->
 
     <button id="help-bug-btn" title="Help">
-        <svg width="100%" height="100%" viewBox="0 0 224 240" version="1.1" xmlns="http://www.w3.org/2000/svg"
+        <svg width="100%" height="100%" viewBox="-20 -20 254 270" version="1.1" xmlns="http://www.w3.org/2000/svg"
             xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/"
             style="fill-rule:evenodd;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:1.5;">
-            <g id="Layer3"></g>
-            <rect id="Artboard1" x="0" y="0" width="224" height="240" style="fill:none;" />
-            <clipPath id="_clip1">
-                <rect x="0" y="0" width="224" height="240" />
-            </clipPath>
-            <g clip-path="url(#_clip1)">
+            <defs>
+                <filter id="dropshadow" width="140%" height="140%">
+                    <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#000000" />
+                </filter>
+            </defs>
+    
+            
+            <g filter="url(#dropshadow)">
                 <g id="Layer4">
                     <path
                         d="M60.644,104.58c-11.256,-5.528 -12.727,-5.926 -26.493,-14.801c-13.766,-8.874 -18.652,-15.658 -20.973,-18.747"

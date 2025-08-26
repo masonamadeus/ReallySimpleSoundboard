@@ -7,8 +7,7 @@ import { BoardManager } from './BoardManager.js';
 import { ThemeManager } from './ThemeManager.js';
 import {
     appEvents, arrayBufferToBase64, base64ToArrayBuffer,
-    loadGoogleFonts, slugify, formatIdAsTitle, formatBytes,
-    getContrastColor, debounce, randomButNot
+    loadGoogleFonts, slugify, formatIdAsTitle, formatBytes
 } from './helper-functions.js';
 
 // ====================================================================
@@ -28,6 +27,7 @@ export class SoundboardManager {
         this.isRearranging = false;
         this.draggedItem = null;
         this.themeManager = new ThemeManager(this.db, new SoundboardDB('default'), this);
+        this.boardManager = new BoardManager();
     }
 
     async initialize() {
@@ -240,6 +240,28 @@ export class SoundboardManager {
 
     attachGlobalEventListeners() {
 
+        // PROVIDE LIST OF AVAILABLE COMMANDS WHEN ASKED
+        appEvents.on('request:availableCommands', ({ callback }) => {
+            const allAvailableCommands = [];
+
+            // Loop through all card instances
+            for (const card of this.allCards.values()) {
+                const cardCommands = card.commands; // Use the getter
+
+                if (cardCommands.length > 0) {
+                    allAvailableCommands.push({
+                        cardId: card.id,
+                        cardTitle: card.data.title,
+                        cardType: card.data.type,
+                        commands: cardCommands
+                    });
+                }
+            }
+            // Send the compiled list back to the card that requested it
+            callback(allAvailableCommands);
+        });
+
+
         document.getElementById('soundboard-title').addEventListener('blur', (e) => {
             const newTitle = e.target.textContent.trim();
             document.title = newTitle + " | B&M RSS";
@@ -271,7 +293,6 @@ export class SoundboardManager {
         document.getElementById('upload-config-input').addEventListener('change', (e) => this.uploadConfig(e));
         document.getElementById('db-manager-btn').addEventListener('click', () => this.showDbManagerModal());
 
-        document.getElementById('switch-board-btn').addEventListener('click', () => this.openBoardSwitcherModal());
         document.getElementById('create-new-board-btn').addEventListener('click', () => this.createNewBoard());
 
         // listener to close the board switcher modal when clicking the background
@@ -294,8 +315,6 @@ export class SoundboardManager {
         document.getElementById('clear-database-btn').addEventListener('click', () => this.handleClearDatabase());
 
 
-        // COSMETICS MODAL LISTENERS
-        document.getElementById('cosmetics-btn').addEventListener('click', () => this.themeManager.open());
 
         // HELPFUL BUG
 
@@ -373,29 +392,29 @@ export class SoundboardManager {
     }
 
 
-async handleDrop(event) {
-    event.preventDefault();
-    if (!this.isRearranging || !this.draggedItem) return;
+    async handleDrop(event) {
+        event.preventDefault();
+        if (!this.isRearranging || !this.draggedItem) return;
 
-    const targetCard = event.target.closest('.sound-card');
-    if (targetCard && targetCard !== this.draggedItem) {
-        
-        const fromId = this.draggedItem.dataset.cardId;
-        const toId = targetCard.dataset.cardId;
+        const targetCard = event.target.closest('.sound-card');
+        if (targetCard && targetCard !== this.draggedItem) {
 
-        const fromIndex = this.gridLayout.findIndex(item => item.id === fromId);
-        const toIndex = this.gridLayout.findIndex(item => item.id === toId);
+            const fromId = this.draggedItem.dataset.cardId;
+            const toId = targetCard.dataset.cardId;
 
-        if (fromIndex > -1 && toIndex > -1) {
-            // Swap the items in the layout array
-            [this.gridLayout[fromIndex], this.gridLayout[toIndex]] = [this.gridLayout[toIndex], this.gridLayout[fromIndex]];
-            await this._saveLayout();
-            this.renderGrid(); // Re-render the grid in the new order
+            const fromIndex = this.gridLayout.findIndex(item => item.id === fromId);
+            const toIndex = this.gridLayout.findIndex(item => item.id === toId);
+
+            if (fromIndex > -1 && toIndex > -1) {
+                // Swap the items in the layout array
+                [this.gridLayout[fromIndex], this.gridLayout[toIndex]] = [this.gridLayout[toIndex], this.gridLayout[fromIndex]];
+                await this._saveLayout();
+                this.renderGrid(); // Re-render the grid in the new order
+            }
         }
     }
-}
 
-    handleDragEnd() {
+    handleDragEnd(e) {
         if (this.draggedItem) {
             this.draggedItem.classList.remove('dragging');
             this.draggedItem = null;
@@ -414,36 +433,11 @@ async handleDrop(event) {
             card.setAttribute('draggable', this.isRearranging);
         });
     }
-    
+
 
     // ================================================================
     // Global Functionality Methods
     // ================================================================
-
-    // Should this be moved to ThemeManager class?
-    async openBoardSwitcherModal() {
-        const boardIds = await BoardManager.getBoardList(); // UPDATED
-        const boardListElement = document.getElementById('board-list');
-        const modal = document.getElementById('board-switcher-modal');
-
-        boardListElement.innerHTML = ''; // Clear previous list
-
-        if (boardIds.length === 0) {
-            boardListElement.innerHTML = '<li><small>No other boards found. Create one by adding "?board=board-name" to the URL.</small></li>';
-        } else {
-            boardIds.forEach(id => {
-                const listItem = document.createElement('li');
-                const link = document.createElement('a');
-                link.textContent = id;
-                // The 'default' board links to the base URL
-                link.href = (id === 'default') ? window.location.pathname : `?board=${id}`;
-                listItem.appendChild(link);
-                boardListElement.appendChild(listItem);
-            });
-        }
-
-        modal.style.display = 'flex';
-    }
 
     /**
  * Safely removes a card from the application by its unique ID.
@@ -479,9 +473,9 @@ async handleDrop(event) {
 
         console.log(`Successfully removed card: ${cardIdToRemove}`);
     }
-    // We need to revisit once we have moved away from position-based IDs to event-driven interaction and unique IDs
-    // We'll have to make sure our data structure works when everything is decoupled
-    // Also, in the future once this is complete, we should create a way for boards saved from previous versions of the app can still upload
+
+
+    // we should create a way for boards saved from previous versions of the app can still upload
     async downloadConfig() {
         const allData = await this.db.getAll();
         const soundboardTitle = document.getElementById('soundboard-title').textContent.trim();
@@ -591,7 +585,7 @@ async handleDrop(event) {
     async updateDbFileList() {
         const fileListEl = document.getElementById('db-file-list');
         const soundData = (await this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll')).filter(c => c.type === 'sound');
-    
+
         fileListEl.innerHTML = '';
         if (soundData.length === 0) {
             fileListEl.innerHTML = '<li><small>No sounds found.</small></li>';
@@ -600,7 +594,7 @@ async handleDrop(event) {
 
         soundData.forEach(item => {
             const li = document.createElement('li');
-            li.textContent = `Button "${item.name}": ${item.files.length} file(s)`;
+            li.textContent = `Button "${item.title}": ${item.files.length} file(s)`;
             fileListEl.appendChild(li);
         });
     }

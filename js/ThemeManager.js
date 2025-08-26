@@ -21,6 +21,7 @@ export class ThemeManager {
         this.debouncedSave = debounce(() => this.saveCurrentCosmetics(), 300);
 
         // UI Element References
+        this.openModalButton = document.getElementById('cosmetics-btn');
         this.modal = document.getElementById('cosmetics-modal');
         this.fontInput = document.getElementById('font-input');
         this.colorPickers = this.modal.querySelectorAll('input[type="color"]');
@@ -52,6 +53,8 @@ export class ThemeManager {
         this.modal.addEventListener('click', (e) => {
             if (e.target.id === 'cosmetics-modal') this.close();
         });
+
+        this.openModalButton.addEventListener('click', () => this.open());
 
         this.colorPickers.forEach(input => {
             input.addEventListener('input', (e) => this.updateColor(e.target.dataset.cssVar, e.target.value));

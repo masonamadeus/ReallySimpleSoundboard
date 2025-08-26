@@ -1,3 +1,5 @@
+//@ts-nocheck
+
 export function formatIdAsTitle(id) {
     if (!id) return '';
     return id
