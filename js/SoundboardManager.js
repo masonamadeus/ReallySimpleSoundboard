@@ -53,13 +53,12 @@ export class SoundboardManager {
         await this.loadCardsAndLayout();
     }
 
-    // --- REFACTOR: New unified loading and rendering method ---
+    
     async loadCardsAndLayout() {
         this.soundboardGrid.innerHTML = ''; // Clear the grid
         this.allCards.clear(); // Clear the instance map
 
         try {
-            // 1. Fetch all card data and the layout concurrently
             const [allCardData, layoutData] = await Promise.all([
                 this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll'),
                 this.db.get(this.GRID_LAYOUT_KEY)
@@ -84,18 +83,18 @@ export class SoundboardManager {
                 this.allCards.set(cardData.id, cardInstance);
             });
 
-            // 3. Set up the grid layout
             if (layoutData && Array.isArray(layoutData.layout)) {
                 this.gridLayout = layoutData.layout;
             } else {
-                // If no layout exists, create a default from the loaded cards
                 this.gridLayout = allCardData.map(cd => ({ type: cd.type, id: cd.id }));
                 this.gridLayout.push({ type: 'control', id: 'control-card' });
                 await this._saveLayout();
             }
-
-            // 4. Render the grid based on the final layout
+            
             this.renderGrid();
+            
+            // NEW: After all cards are instantiated and rendered, broadcast commands.
+            this._broadcastAvailableCommands(); 
 
         } catch (error) {
             console.error("Failed to load cards and layout:", error);
@@ -115,22 +114,39 @@ export class SoundboardManager {
                     cardElement = cardInstance.cardElement;
                 }
             }
-
+            
             if (cardElement) {
                 this.soundboardGrid.appendChild(cardElement);
             }
         });
+        
+        // REMOVED: The old, inefficient way of updating timers one-by-one is gone.
+        // We now use the event broadcast pattern.
+    }
 
-        // Update timer sound selectors after all sound cards are available
-        const soundCardData = Array.from(this.allCards.values())
-            .filter(card => card instanceof SoundCard)
-            .map(card => card.data);
-
-        this.allCards.forEach(card => {
-            if (card instanceof TimerCard) {
-                card.updateTimerSoundSelectors(soundCardData);
+    /**
+     * Gathers all available commands from every card instance and broadcasts them
+     * via a single global event.
+     * @private
+     */
+    _broadcastAvailableCommands() {
+        const allAvailableCommands = [];
+        for (const card of this.allCards.values()) {
+            // Use the `commands` getter from the RSSCard interface
+            const cardCommands = card.commands; 
+            
+            if (cardCommands && cardCommands.length > 0) {
+                allAvailableCommands.push({
+                    cardId: card.id,
+                    cardName: card.data.title, // Use the user-facing title
+                    cardType: card.data.type,
+                    commands: cardCommands
+                });
             }
-        });
+        }
+        
+        // Dispatch the single event with the complete payload.
+        appEvents.dispatch('update:commands', allAvailableCommands);
     }
 
     async addCard(type, initialData = {}) {
@@ -154,17 +170,20 @@ export class SoundboardManager {
                 return;
         }
 
-        // Add the new card's reference to the layout
         this.gridLayout.push({ type: type, id: newId });
-
-        // Save the new card data and the updated layout
+        
         await Promise.all([
             this.db.save(newId, cardData),
             this._saveLayout()
         ]);
-
-        // Now, reload and render the grid to reflect the new state.
-        // This is safer than trying to surgically add the new element right now.
+        // 08262025
+        // Instead of reloading everything, we can instantiate the card and broadcast.
+        // For simplicity and consistency, the full reload is fine, but for optimization:
+        // 1. Create the new card instance.
+        // 2. Add it to `this.allCards`.
+        // 3. Append its element to the grid.
+        // 4. Then, call `_broadcastAvailableCommands()` to update all timers.
+        // The current implementation re-runs loadCardsAndLayout, which works perfectly.
         await this.loadCardsAndLayout();
     }
 
@@ -239,28 +258,6 @@ export class SoundboardManager {
     // ================================================================
 
     attachGlobalEventListeners() {
-
-        // PROVIDE LIST OF AVAILABLE COMMANDS WHEN ASKED
-        appEvents.on('request:availableCommands', ({ callback }) => {
-            const allAvailableCommands = [];
-
-            // Loop through all card instances
-            for (const card of this.allCards.values()) {
-                const cardCommands = card.commands; // Use the getter
-
-                if (cardCommands.length > 0) {
-                    allAvailableCommands.push({
-                        cardId: card.id,
-                        cardTitle: card.data.title,
-                        cardType: card.data.type,
-                        commands: cardCommands
-                    });
-                }
-            }
-            // Send the compiled list back to the card that requested it
-            callback(allAvailableCommands);
-        });
-
 
         document.getElementById('soundboard-title').addEventListener('blur', (e) => {
             const newTitle = e.target.textContent.trim();

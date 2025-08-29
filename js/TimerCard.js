@@ -27,9 +27,6 @@ export class TimerCard extends RSSCard {
                 triggered: false
             },
 
-            // This flag will live on the timer instance, not in the database
-            // It's temporary state for a single run.
-            // hasTriggeredEndAction: false 
         };
     }
 
@@ -129,6 +126,11 @@ export class TimerCard extends RSSCard {
         this.timerEndSoundSelect = this.cardElement.querySelector('.timer-end-action');
 
 
+        // BOUND EVENT HANDLERS
+        this.boundHandleButtonDeletion = this.handleButtonDeletion.bind(this);
+        this.boundPopulateSelectors = this._populateCommandSelectors.bind(this);
+
+        // BOUND DEBOUNCED SAVE
         this.debouncedSave = debounce(() => this.handleControlChange(), 250);
 
         this.attachListeners();
@@ -164,8 +166,10 @@ export class TimerCard extends RSSCard {
         this.timerSecondsValue.addEventListener('blur', (e) => this.handleManualTimeInput(e));
 
 
-        this.boundHandleButtonDeletion = this.handleButtonDeletion.bind(this);
+        
         appEvents.on('cardDeleted', this.boundHandleButtonDeletion);
+
+        appEvents.on('update:commands', this.boundPopulateSelectors);
     }
 
     destroy() {
@@ -174,6 +178,7 @@ export class TimerCard extends RSSCard {
             cancelAnimationFrame(this.animationFrameId);
         }
         appEvents.off('cardDeleted', this.boundHandleButtonDeletion);
+        appEvents.off('update:commands', this.boundPopulateSelectors)
     }
 
     // ================================================================
@@ -240,6 +245,7 @@ export class TimerCard extends RSSCard {
         this.updateUI();
     }
 
+    
     handleControlChange() {
         // Read all UI values
         const minutes = parseInt(this.timerMinutesRange.value, 10);
@@ -471,38 +477,6 @@ export class TimerCard extends RSSCard {
         this.timerDisplay.classList.toggle('finished', shouldGlow);
 
 
-    }
-
-    _populateCommandSelectors(availableCommands) {
-        const startActionSelect = this.cardElement.querySelector('.timer-start-action');
-        const endActionSelect = this.cardElement.querySelector('.timer-end-action');
-
-        startActionSelect.innerHTML = '<option value="">None</option>';
-        endActionSelect.innerHTML = '<option value="">None</option>';
-
-        availableCommands.forEach(card => {
-            if (card.cardId === this.id) return;
-
-            const optGroup = document.createElement('optgroup');
-            optGroup.label = `${card.cardType.toUpperCase()}: ${card.cardName}`;
-
-            card.commands.forEach(command => {
-                const option = document.createElement('option');
-                option.textContent = command.name;
-                option.value = JSON.stringify({
-                    targetId: card.cardId,
-                    action: command.action,
-                    hasDuration: command.hasDuration
-                });
-                optGroup.appendChild(option);
-            });
-
-            startActionSelect.add(optGroup.cloneNode(true));
-            endActionSelect.add(optGroup);
-        });
-
-        startActionSelect.value = this.data.startAction.command || "";
-        endActionSelect.value = this.data.endAction.command || "";
     }
 
 }
