@@ -146,23 +146,17 @@ export class TimerCard extends Card {
     }
 
     _attachListeners() {
+
+        // MAIN CARD CONTROL BUTTONS
         this.startPauseBtn.addEventListener('click', () => this.handlePlayPause());
         this.resetBtn.addEventListener('click', () => this.reset());
         this.removeTimerBtn.addEventListener('click', () => this._handleDeleteCard());
 
-        this.debouncedSave = debounce(() => this.handleSettingsChange(), 250); // debounce the save
-        this.timerMinutesRange.addEventListener('input', () => {
-            this._updateDisplayTextFromSliders();
-            this.debouncedSave();
-        });
-        this.timerSecondsRange.addEventListener('input', () => {
-            this._updateDisplayTextFromSliders();
-            this.debouncedSave();
-        });
 
-        // These don't need debouncing unless someone is using AHK to be a psychopath lol
-        const immediateChangeControls = [
-            this.hideOptionsToggle, this.loopCheckbox
+        // OPTIONS/SETTINGS THAT ARE SIMPLE TOGGLES
+         const immediateChangeControls = [
+            this.hideOptionsToggle,
+            this.loopCheckbox,
         ];
         immediateChangeControls.forEach(el => el.addEventListener('change', () => this.handleSettingsChange()));
         this.modeRadios.forEach(radio => radio.addEventListener('change', () => this.handleSettingsChange()));
@@ -171,9 +165,30 @@ export class TimerCard extends Card {
         this.timerStartActionSelect.addEventListener('change', () => this.handleActionChange());
         this.timerEndActionSelect.addEventListener('change', () => this.handleActionChange());
 
-        // text editable minutes/seconds (these trigger on 'blur', which is fine)
+
+        // SLIDERS
+        const debounceSliderChange = debounce(() => this.handleSliderChange(), 200)
+
+        this.timerMinutesRange.addEventListener('input', () => {
+            this._updateDisplayTextFromSliders();
+            debounceSliderChange();
+        });
+        this.timerSecondsRange.addEventListener('input', () => {
+            this._updateDisplayTextFromSliders();
+            debounceSliderChange();
+        });
+       
+
+        // TEXT EDITABLE minutes/seconds/title (these trigger on 'blur', which is fine)
         this.timerMinutesValue.addEventListener('blur', (e) => this.handleManualTimeInput(e));
         this.timerSecondsValue.addEventListener('blur', (e) => this.handleManualTimeInput(e));
+        this.timerTitle.addEventListener('blur', (e) => {
+            //@ts-ignore
+            const newTitle = e.target.textContent.trim();
+            if (newTitle !== this.data.title) {
+                this.updateData({ title: newTitle });
+            }
+        });
 
         MSG.on(MSG.is.SOUNDBOARD_DELETED_CARD, this.boundHandleButtonDeletion);
     }
@@ -213,6 +228,7 @@ export class TimerCard extends Card {
             option.value = command.id;
 
             startActionSelect.add(option);
+            //@ts-ignore
             endActionSelect.add(option.cloneNode(true));
         });
 
@@ -254,14 +270,20 @@ export class TimerCard extends Card {
      * This is lightweight and does NOT re-prepare actions.
      */
     async handleSettingsChange() {
-        const minutes = parseInt(this.timerMinutesRange.value, 10);
-        const seconds = parseInt(this.timerSecondsRange.value, 10);
-        
         await this.updateData({
-            targetDurationMs: (minutes * 60 + seconds) * 1000,
             optionsHidden: this.hideOptionsToggle.checked,
             isLooping: this.loopCheckbox.checked,
             mode: this.cardElement.querySelector('.timer-mode-radio:checked').value,
+        });
+        this.updateUI();
+    }
+
+    async handleSliderChange() {
+        const minutes = parseInt(this.timerMinutesRange.value, 10);
+        const seconds = parseInt(this.timerSecondsRange.value, 10);
+
+        await this.updateData({
+            targetDurationMs: (minutes * 60 + seconds) * 1000,
         });
 
         this.updateUI();
@@ -281,8 +303,6 @@ export class TimerCard extends Card {
             this._prepareAction('endAction', newEndCommandId)
         ]);
         
-        // No need to call updateUI() here, as _prepareAction saves the state
-        // and doesn't change any other visual element.
     }
 
     handleManualTimeInput(e) {
@@ -299,6 +319,19 @@ export class TimerCard extends Card {
 
         this._updateDisplayTextFromSliders();
         this.debouncedSave();
+    }
+
+    /**
+    * Updates ONLY the timer's text display based on current slider values.
+    * This is lightweight and can be called rapidly without performance issues.
+    */
+    _updateDisplayTextFromSliders() {
+        const minutes = parseInt(this.timerMinutesRange.value, 10);
+        const seconds = parseInt(this.timerSecondsRange.value, 10);
+        this.timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        // Also sync the number input box next to the slider
+        this.timerMinutesValue.value = String(minutes);
+        this.timerSecondsValue.value = String(seconds);
     }
 
     handleButtonDeletion({ deletedId }) {
@@ -462,18 +495,7 @@ export class TimerCard extends Card {
 
     }
 
-    /**
-    * Updates ONLY the timer's text display based on current slider values.
-    * This is lightweight and can be called rapidly without performance issues.
-    */
-    _updateDisplayTextFromSliders() {
-        const minutes = parseInt(this.timerMinutesRange.value, 10);
-        const seconds = parseInt(this.timerSecondsRange.value, 10);
-        this.timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        // Also sync the number input box next to the slider
-        this.timerMinutesValue.value = String(minutes);
-        this.timerSecondsValue.value = String(seconds);
-    }
+    
 
     renderDisplay(currentElapsed = this.data.elapsedMs) {
         let msToDisplay;
