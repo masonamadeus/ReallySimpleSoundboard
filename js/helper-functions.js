@@ -228,6 +228,28 @@ export function randomButNot(min, max, notThis) {
     return value;
 }
 
+export function lerp(startValue, endValue, duration, onUpdate) {
+    let startTime = null;
+
+    function animate(currentTime) {
+        if (startTime === null) {
+            startTime = currentTime;
+        }
+
+        const elapsedTime = currentTime - startTime;
+        const progress = Math.min(elapsedTime / duration, 1); // Clamp progress at 1 (100%)
+
+        const currentValue = startValue + (endValue - startValue) * progress;
+        onUpdate(currentValue); // Use the callback to provide the current value
+
+        if (progress < 1) {
+            requestAnimationFrame(animate);
+        }
+    }
+
+    requestAnimationFrame(animate);
+}
+
 export function getAudioDuration(arrayBuffer) {
     return new Promise((resolve, reject) => {
         const blob = new Blob([arrayBuffer]);

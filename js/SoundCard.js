@@ -1,7 +1,9 @@
-import { getAudioDuration, getContrastColor, debounce, randomButNot } from './helper-functions.js';
+import { getAudioDuration, getContrastColor, debounce, randomButNot, lerp } from './helper-functions.js';
 import { AudioPlayer } from './AudioPlayer.js';
-import { RSSCard } from './RSSCard.js';
+import { Card } from './RSSCard.js';
 import { MSG } from './MSG.js';
+
+// SECRET PHRASE: MASHED PERDADERS
 
 /**
  * Represents a single sound card (sound button) component in the soundboard grid.
@@ -10,7 +12,7 @@ import { MSG } from './MSG.js';
 
 // NEED TO MOVE DUCKING FUNCTIONALITY IN HERE FROM SOUNDBOARDMANAGER AND MAKE THAT EVENT-DRIVEN
 
-export class SoundCard extends RSSCard {
+export class SoundCard extends Card {
 
     static Default() {
         return {
@@ -96,7 +98,7 @@ export class SoundCard extends RSSCard {
         this.updateUI();
     }
 
-    _checkforMigration(){
+    _checkforMigration() {
         // duration in ms needs to be updated if it's not there
         this.data.files.forEach((file, index) => {
             // If a file from the DB is missing the duration, it needs migrating.
@@ -112,10 +114,10 @@ export class SoundCard extends RSSCard {
 
     _registerCommands() {
         // Register the main "Press" command for the whole card. PROBLEM: TOGGLEPLAY HAS INDETERMINATE DURATION
-        this.registerCommand({ 
-            name: "Press", 
-            execute: this.togglePlay, 
-            preload: this.getNextPlaybackInfo 
+        this.registerCommand({
+            name: "Press",
+            execute: this.togglePlay,
+            preload: this.getNextPlaybackInfo
         });
 
         // Register a specific command for each individual sound file
@@ -139,10 +141,10 @@ export class SoundCard extends RSSCard {
         return this.createCommandTicket(file.durationMs || 0, { specificIndex: index });
     }
 
-    getNextPlaybackInfo(){
+    getNextPlaybackInfo() {
         const nextIndex = this._determineNextFileIndex();
-        
-        if (nextIndex === null) return this.createCommandTicket(0,{specificIndex: null});
+
+        if (nextIndex === null) return this.createCommandTicket(0, { specificIndex: null });
 
         return this.getFileInfo(nextIndex)
     }
@@ -245,13 +247,13 @@ export class SoundCard extends RSSCard {
             const totalSeconds = fileData.durationMs / 1000;
             const durationMinutes = Math.floor(totalSeconds / 60)
             const durationSeconds = Math.floor(totalSeconds % 60);
-            const metadata = { 
+            const metadata = {
                 durationMinutes: durationMinutes,
                 durationSeconds: durationSeconds,
                 durationMs: fileData.durationMs,
                 fileSize: fileData.arrayBuffer.byteLength / 1024,
                 title: fileData.fileName,
-             };
+            };
             this.fileMetadata.set(fileId, metadata);
             return metadata;
         } catch (error) {
@@ -360,12 +362,12 @@ export class SoundCard extends RSSCard {
 
 
     _handlePriorityPlay({ cardId }) {
-        
+
         //add card to the active priority players list
         this.activePriorityPlayers.add(cardId);
 
         // If a priority sound started, AND it's not me, AND I'm not priority, AND I'm playing...
-        if (!this.isDucked && this.data.id !== cardId && !this.data.priority && this.player.isPlaying) {
+        if (!this.isDucked && this.data.id !== cardId && !this.data.priority) {
             // ...then I should quiet down.
             this.isDucked = true;
             const targetVolume = this.data.duckFactor * this.data.volume;
@@ -373,7 +375,7 @@ export class SoundCard extends RSSCard {
         }
     }
 
-    _handlePriorityStop( { cardId }) {
+    _handlePriorityStop({ cardId }) {
         this.activePriorityPlayers.delete(cardId)
         // When a priority sound stops, I can return to my normal volume.
         if (!this.data.priority && this.isDucked && this.activePriorityPlayers.size === 0) {
@@ -405,32 +407,19 @@ export class SoundCard extends RSSCard {
 
     /**
  * Smoothly transitions the card's volume to a target value over a duration.
- * @param {number} targetVolume The volume to transition to (0.0 to 1.0).
+ * @param {number} targetVolume The volume to transition to (will be clamped between 0.0 and 1.0).
  * @param {number} duration The duration of the transition in milliseconds.
  */
     lerpVolume(targetVolume, duration) {
-        if (this.volumeAnimation) {
-            cancelAnimationFrame(this.volumeAnimation);
-        }
-
+        const clampedTarget = Math.max(0, Math.min(1, targetVolume));
         const startVolume = this.player.audio.volume;
-        const startTime = performance.now();
 
-        const animate = (currentTime) => {
-            const elapsedTime = currentTime - startTime;
-            const progress = Math.min(elapsedTime / duration, 1);
-
-            const currentVolume = startVolume + (targetVolume - startVolume) * progress;
-
+        // Use the new generic lerp function
+        lerp(startVolume, clampedTarget, duration, (currentVolume) => {
+            // This is our callback function, which runs on every animation frame
             this.player.audio.volume = currentVolume;
             this.elements.volumeSlider.value = currentVolume;
-
-            if (progress < 1) {
-                this.volumeAnimation = requestAnimationFrame(animate);
-            }
-        };
-
-        this.volumeAnimation = requestAnimationFrame(animate);
+        });
     }
 
     // ===================================
@@ -555,8 +544,8 @@ export class SoundCard extends RSSCard {
             this.updateData({ [dataKey]: value }).then(() => {
                 this.updateUI();
                 if (dataKey === 'title') {
-                MSG.say(MSG.is.CARD_COMMANDS_CHANGED);
-            }
+                    MSG.say(MSG.is.CARD_COMMANDS_CHANGED);
+                }
             });
         }
     };

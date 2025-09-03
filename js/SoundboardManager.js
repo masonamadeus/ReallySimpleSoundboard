@@ -34,6 +34,8 @@ export class SoundboardManager {
         this.migrationQueue = [];
         this.isMigrating = false;
 
+        this.cardCommands = new Map();
+
         this.managerAPI = {
             getCardById: this.getCardById.bind(this),
             showConfirmModal: this.showConfirmModal.bind(this),
@@ -508,6 +510,11 @@ export class SoundboardManager {
         } else {
             MSG.log(`Invalid command: ${command}\nTarget Card: ${targetCard}`,1)
         }
+    }
+
+    updateCardCommands(cardId, commands){
+        const card = this.allCards.get(cardId);
+        
     }
 
     /**

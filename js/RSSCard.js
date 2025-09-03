@@ -1,5 +1,32 @@
 import { MSG } from './MSG.js';
-export class RSSCard {
+class PreloadTicket {
+    /**
+     * @param {object} options
+     * @param {number} [options.durationMs=0] - The duration of the command in milliseconds.
+     * @param {object} [options.args={}] - Any specific arguments needed for the execute step.
+     */
+    constructor({ durationMs = 0, args = {} } = {}) {
+        if (typeof durationMs !== 'number') {
+            console.error('Invalid CommandTicket: durationMs must be a number.');
+            this.durationMs = 0;
+        } else {
+            this.durationMs = durationMs;
+        }
+
+        if (typeof args !== 'object' || args === null) {
+            console.error('Invalid CommandTicket: args must be an object.');
+            this.args = {};
+        } else {
+            this.args = args;
+        }
+    }
+}
+
+export class Card {
+
+    // Make the PreloadTicket class available to child cards because imports are annoying asf
+    static PreloadTicket = PreloadTicket;
+    
     /**
      * The constructor for all card types.
      * @param {object} cardData The initial data for the card from the database.
@@ -106,28 +133,20 @@ export class RSSCard {
 
         // if we're missing a preload command or it's not a function
         if (!command || typeof command.preload !== 'function') {
-            return this.createCommandTicket(); // Return a default, safe ticket
+            return new PreloadTicket(); // Return a default, safe ticket
         }
 
         // get our ticket and validate it
         const ticket = command.preload(options);
-        if (ticket && typeof ticket.durationMs === 'number' && typeof ticket.args === 'object'){
+        if (ticket instanceof PreloadTicket){
             MSG.log(`Preloaded Command: ${command.id}, returning ticket.`,1,ticket)
             // if it's a valid ticket, return it
             return ticket;
         }
 
         MSG.log(`Command '${commandId}' returned an invalid ticket.`,1,ticket)
-        return this.createCommandTicket()
+        return new PreloadTicket
 
-    }
-
-    createCommandTicket(durationMs = 0, args = {}) {
-        if (typeof durationMs !== 'number' || typeof args !== 'object' || args === null) {
-            console.error('Invalid CommandTicket format. durationMs must be a number and args must be an object.',1);
-            return { durationMs: 0, args: {} };
-        }
-        return { durationMs, args };
     }
 
     /**

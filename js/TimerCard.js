@@ -1,8 +1,8 @@
 import { debounce, randomButNot } from "./helper-functions.js";
-import { RSSCard } from "./RSSCard.js";
+import { Card } from "./RSSCard.js";
 import { MSG } from './MSG.js';
 
-export class TimerCard extends RSSCard {
+export class TimerCard extends Card {
 
     static Default() {
         return {

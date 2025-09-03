@@ -1,6 +1,6 @@
-import { RSSCard } from "./RSSCard.js";
+import { Card } from "./RSSCard.js";
 
-export class NotepadCard extends RSSCard {
+export class NotepadCard extends Card {
 
     static Default() {
         return {
