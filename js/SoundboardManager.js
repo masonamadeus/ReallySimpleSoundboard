@@ -518,6 +518,7 @@ export class SoundboardManager {
     registerCardCommands(cardId, commands) {
         this.allCardCommands.set(cardId, commands);
         this.broadcastAllCommands();
+        //MSG.log(`Registered Card Commands for ${cardId}`)
     }
 
     /**
@@ -527,6 +528,7 @@ export class SoundboardManager {
     unregisterCardCommands(cardId) {
         this.allCardCommands.delete(cardId);
         this.broadcastAllCommands();
+        //MSG.log(`Unregistered Card Commands for ${cardId}`)
     }
 
     /**
@@ -543,7 +545,7 @@ export class SoundboardManager {
         // Notify each card
         for (const card of this.allCards.values()) {
             if (typeof card.onCommandsChanged === 'function') {
-                card.onCommandsChanged(commandList);
+                card.refreshAvailableCommands(commandList);
             }
         }
     }, 600); // Debounce by 600ms

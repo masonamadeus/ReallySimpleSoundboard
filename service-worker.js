@@ -1,64 +1,85 @@
-// A version number for our cache. Change this string to force an update.
-const CACHE_NAME = 'Bug-And-Moss-Soundboard-v033'; 
+// Bump this when you release a new version
+const CACHE_NAME = 'Really Simple Soundboard V0.01';
 
-// The list of files that make up the "app shell".
+// Files to always pre-cache (your core app shell)
 const urlsToCache = [
   './index.html',
-  // Add icon files to make sure they are available offline too
   './icons/android-chrome-192x192.png',
   './icons/android-chrome-512x512.png'
 ];
 
-// The 'install' event is fired when the service worker is first registered.
+// INSTALL: open cache and store core files
 self.addEventListener('install', event => {
+  self.skipWaiting(); // activate new SW immediately
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache and caching app shell');
-        return cache.addAll(urlsToCache);
-      })
-  );
-});
-
-// The 'activate' event is fired after install. It's a good place to clean up old caches.
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(cacheNames => {
-      return Promise.all(
-        cacheNames.map(cacheName => {
-          // If a cache's name is old (not our current CACHE_NAME), delete it.
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
+    caches.open(CACHE_NAME).then(cache => {
+      console.log('[SW] Pre-caching app shell');
+      return cache.addAll(urlsToCache);
     })
   );
 });
 
-// The 'fetch' event intercepts all network requests.
-self.addEventListener('fetch', event => {
-  // We only apply special logic for navigation requests (i.e., for HTML pages).
-  if (event.request.mode === 'navigate') {
-    const requestUrl = new URL(event.request.url);
-
-    // ONLY if the navigation is for the soundboard, serve the cached app shell.
-    if (requestUrl.pathname.endsWith('/soundboard.html')) {
-      event.respondWith(
-        caches.match('./soundboard.html').then(response => {
-          return response || fetch(event.request);
+// ACTIVATE: clean up old caches
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(cacheNames =>
+      Promise.all(
+        cacheNames.map(cacheName => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[SW] Deleting old cache', cacheName);
+            return caches.delete(cacheName);
+          }
         })
-      );
-    }
-    // For all other navigation requests (like the homepage), we do nothing.
-    // The request will pass through to the network as if the service worker wasn't here.
-    return;
-  }
+      )
+    )
+  );
+  self.clients.claim(); // start controlling pages immediately
+});
 
-  // For all other requests (like images), use a "cache-first" strategy.
+// FETCH: handle all requests
+self.addEventListener('fetch', event => {
+  const url = new URL(event.request.url);
+
   event.respondWith(
-    caches.match(event.request).then(response => {
-      return response || fetch(event.request);
+    caches.open(CACHE_NAME).then(async cache => {
+      if (url.pathname.endsWith('/index.html') || url.pathname === '/') {
+        // Always serve the cached base index.html
+        const cached = await cache.match('./index.html');
+        if (cached) return cached;
+
+        // If not cached, fetch from network and cache it
+        const networkResponse = await fetch(event.request);
+        if (networkResponse && networkResponse.status === 200) {
+          cache.put('./index.html', networkResponse.clone());
+        }
+        return networkResponse;
+      }
+
+      // STATIC ASSETS: cache once, ignore query params
+      if (/\.(js|css|png|jpg|jpeg|gif|svg|ico|webp|mp3|wav|ogg|m4a|woff2?|ttf|eot)$/.test(url.pathname)) {
+        const normalized = new Request(url.origin + url.pathname, {
+          method: event.request.method,
+          headers: event.request.headers,
+          mode: event.request.mode,
+          credentials: event.request.credentials,
+          redirect: event.request.redirect,
+          referrer: event.request.referrer,
+          integrity: event.request.integrity,
+        });
+
+        const cached = await cache.match(normalized);
+        if (cached) return cached;
+
+        const networkResponse = await fetch(event.request);
+        if (networkResponse && networkResponse.status === 200) {
+          cache.put(normalized, networkResponse.clone());
+        }
+        return networkResponse;
+      }
+
+      // DEFAULT: try cache first, then network
+      const cached = await cache.match(event.request);
+      return cached || fetch(event.request);
     })
   );
 });

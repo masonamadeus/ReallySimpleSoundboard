@@ -39,7 +39,6 @@ export class SoundCard extends Card {
         const completeCardData = { ...SoundCard.Default(), ...cardData };
         super(completeCardData, soundboardManager, dbInstance)
 
-        this.fileMetadata = new Map();
         this.data.files.forEach(fileData => this._processFile(fileData));
         this.player = new AudioPlayer(() => this._handlePlaybackCompletion());
         this.activePriorityPlayers = new Set();
@@ -69,7 +68,6 @@ export class SoundCard extends Card {
          * @property {HTMLInputElement} speedSlider
          * @property {HTMLTemplateElement} settingsModalTemplate
          * 
-         * 
          */
 
         /** @type {Elements} */
@@ -80,6 +78,7 @@ export class SoundCard extends Card {
             buttonText: this.cardElement.querySelector('.button-text'),
             volumeSlider: this.cardElement.querySelector('.volume-slider'),
             speedSlider: this.cardElement.querySelector('.speed-slider'),
+            //@ts-ignore
             settingsModalTemplate: document.getElementById('sound-card-template').content.querySelector('.sound-settings-modal')
         };
 
@@ -135,16 +134,22 @@ export class SoundCard extends Card {
     getFileInfo(index) {
         const file = this.data.files[index];
         if (!file) {
-            return this.createCommandTicket(); // Return a default ticket if file not found
+            return new Card.PreloadTicket(); // Return a default ticket if file not found
         }
         // Creates a standardized ticket with the file's duration and no specific args needed.
-        return this.createCommandTicket(file.durationMs || 0, { specificIndex: index });
+        return new Card.PreloadTicket({
+            durationMs: file.durationMs || 0, 
+            args: { specificIndex: index 
+        }});
     }
 
     getNextPlaybackInfo() {
         const nextIndex = this._determineNextFileIndex();
 
-        if (nextIndex === null) return this.createCommandTicket(0, { specificIndex: null });
+        if (nextIndex === null) return new Card.PreloadTicket({
+            durationMs: 0, 
+            args: { specificIndex: null
+        }});
 
         return this.getFileInfo(nextIndex)
     }
@@ -234,9 +239,8 @@ export class SoundCard extends Card {
     // #region DEALING WITH FILES/DATA
 
     async _processFile(fileData) {
-        const fileId = `${fileData.fileName}-${fileData.arrayBuffer.byteLength}`;
-        if (this.fileMetadata.has(fileId)) {
-            return this.fileMetadata.get(fileId);
+        if (typeof fileData.durationMs === 'number' && fileData.durationMs >= 0) {
+            return;
         }
 
         try {
@@ -246,20 +250,16 @@ export class SoundCard extends Card {
             const totalSeconds = fileData.durationMs / 1000;
             const durationMinutes = Math.floor(totalSeconds / 60)
             const durationSeconds = Math.floor(totalSeconds % 60);
-            const metadata = {
-                durationMinutes: durationMinutes,
-                durationSeconds: durationSeconds,
-                durationMs: fileData.durationMs,
-                fileSize: fileData.arrayBuffer.byteLength / 1024,
-                title: fileData.fileName,
-            };
-            this.fileMetadata.set(fileId, metadata);
-            return metadata;
+
+            fileData.durationMinutes = durationMinutes
+            fileData.durationSeconds = durationSeconds
+            fileData.fileSize = fileData.arrayBuffer.byteLength / 1024
+            fileData.title = fileData.fileName
+
+
         } catch (error) {
             console.error(`Could not get duration for ${fileData.fileName}:`, error);
             fileData.durationMs = 0;
-            this.fileMetadata.set(fileId, { duration: 0 });
-            return { duration: 0 };
         }
     }
 
@@ -284,19 +284,25 @@ export class SoundCard extends Card {
         return nextIndex;
     }
 
-    /**
-     * @param {number} fileIndex The index of the file in the `this.data.files` array.
-     * @returns {number} The duration of the audio file in milliseconds.
-     */
-    getAudioFileDurationMs(fileIndex) {
+    playFile(fileIndex) {
         const fileData = this.data.files[fileIndex];
-        if (!fileData) return 0;
+        if (!fileData) {
+            console.error(`File not found at index ${fileIndex} for button ${this.data.id}`);
+            return;
+        }
 
-        const fileId = `${fileData.fileName}-${fileData.arrayBuffer.byteLength}`;
-        const metadata = this.fileMetadata.get(fileId);
+        this.player.cleanup();
+        const blob = new Blob([fileData.arrayBuffer], { type: fileData.mimeType });
+        this.player.audio.src = URL.createObjectURL(blob);
+        this.player.audio.volume = this.data.volume;
+        this.player.audio.playbackRate = this.data.playbackRate;
 
-        // Duration is stored in seconds, so convert to ms
-        return metadata ? metadata.duration * 1000 : 0;
+        this.player.audio.play().catch(e => console.error("Playback error:", e));
+
+        if (this.data.priority) {
+            // ANNOUNCE to all other components that a priority sound has started.
+            MSG.say(MSG.is.SOUNDCARD_PRIORITY_STARTED, { cardId: this.data.id });
+        }
     }
 
     //#endregion
@@ -337,28 +343,6 @@ export class SoundCard extends Card {
             this.playFile(indexToPlay);
         }
     }
-
-    playFile(fileIndex) {
-        const fileData = this.data.files[fileIndex];
-        if (!fileData) {
-            console.error(`File not found at index ${fileIndex} for button ${this.data.id}`);
-            return;
-        }
-
-        this.player.cleanup();
-        const blob = new Blob([fileData.arrayBuffer], { type: fileData.mimeType });
-        this.player.audio.src = URL.createObjectURL(blob);
-        this.player.audio.volume = this.data.volume;
-        this.player.audio.playbackRate = this.data.playbackRate;
-
-        this.player.audio.play().catch(e => console.error("Playback error:", e));
-
-        if (this.data.priority) {
-            // ANNOUNCE to all other components that a priority sound has started.
-            MSG.say(MSG.is.SOUNDCARD_PRIORITY_STARTED, { cardId: this.data.id });
-        }
-    }
-
 
     _handlePriorityPlay({ cardId }) {
 
@@ -405,10 +389,10 @@ export class SoundCard extends Card {
     }
 
     /**
- * Smoothly transitions the card's volume to a target value over a duration.
- * @param {number} targetVolume The volume to transition to (will be clamped between 0.0 and 1.0).
- * @param {number} duration The duration of the transition in milliseconds.
- */
+    * Smoothly transitions the card's volume to a target value over a duration.
+    * @param {number} targetVolume The volume to transition to (will be clamped between 0.0 and 1.0).
+    * @param {number} duration The duration of the transition in milliseconds.
+    */
     lerpVolume(targetVolume, duration) {
         const clampedTarget = Math.max(0, Math.min(1, targetVolume));
         const startVolume = this.player.audio.volume;
@@ -433,13 +417,20 @@ export class SoundCard extends Card {
 
         this.settingsModal = this.elements.settingsModalTemplate.cloneNode(true);
 
+        // hook into the new modal
+        //@ts-ignore
         this.settings.fileListElement = this.settingsModal.querySelector('.file-list')
-
+        //@ts-ignore
         this.settings.colorPicker = this.settingsModal.querySelector('.button-color-picker')
+        //@ts-ignore
         this.settings.nameInput = this.settingsModal.querySelector('.button-name-input')
+        //@ts-ignore
         this.settings.shuffleCheckbox = this.settingsModal.querySelector('.shuffle-checkbox')
+        //@ts-ignore
         this.settings.autoplayCheckbox = this.settingsModal.querySelector('.autoplay-checkbox')
+        //@ts-ignore
         this.settings.priorityCheckbox = this.settingsModal.querySelector('.priority-checkbox')
+        //@ts-ignore
         this.settings.loopCheckbox = this.settingsModal.querySelector('.loop-checkbox')
 
 
@@ -463,6 +454,7 @@ export class SoundCard extends Card {
         document.body.appendChild(this.settingsModal);
 
         setTimeout(() => {
+            //@ts-ignore
             this.settingsModal.style.display = 'flex';
         }, 10);
     }
@@ -470,6 +462,7 @@ export class SoundCard extends Card {
     closeSettings() {
         if (!this.settingsModal) { return; }
         this._removeModalListeners();
+        //@ts-ignore
         this.settingsModal.remove();
         this.settingsModal = null;
     }
@@ -546,21 +539,30 @@ export class SoundCard extends Card {
 
 
     _attachModalListeners() {
-        // --- Attach Listeners ---
         this.settingsModal.addEventListener('click', this.boundHandleModalClick);
+        //@ts-ignore
         this.settingsModal.querySelector('.add-file-input').addEventListener('change', this.boundHandleFileInput);
+        //@ts-ignore
         this.settingsModal.querySelector('.clear-files-btn').addEventListener('click', this.boundHandleClearFiles);
+        //@ts-ignore
         this.settingsModal.querySelector('.delete-soundcard-btn').addEventListener('click', this.boundDeleteCard);
+        //@ts-ignore
         this.settings.fileListElement.addEventListener('click', this.boundHandleRemoveFile);
+        //@ts-ignore
         this.settingsModal.querySelector('.modal-content').addEventListener('input', this.boundHandleModalFormInput);
     }
 
     _removeModalListeners() {
         this.settingsModal.removeEventListener('click', this.boundHandleModalClick);
+        //@ts-ignore
         this.settingsModal.querySelector('.add-file-input').removeEventListener('change', this.boundHandleFileInput);
+        //@ts-ignore
         this.settingsModal.querySelector('.clear-files-btn').removeEventListener('click', this.boundHandleClearFiles);
+        //@ts-ignore
         this.settingsModal.querySelector('.delete-soundcard-btn').removeEventListener('click', this.boundDeleteCard);
+        //@ts-ignore
         this.settings.fileListElement.removeEventListener('click', this.boundHandleRemoveFile);
+        //@ts-ignore
         this.settingsModal.querySelector('.modal-content').removeEventListener('input', this.boundHandleModalFormInput);
     }
 

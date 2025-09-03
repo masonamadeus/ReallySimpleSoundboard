@@ -35,7 +35,8 @@ export class TimerCard extends Card {
     }
 
     constructor(cardData, soundboardManager, dbInstance) {
-        super(cardData, soundboardManager, dbInstance);
+        const completeCardData = { ...TimerCard.Default(), ...cardData }
+        super(completeCardData, soundboardManager, dbInstance);
 
         // TITLE AND DISPLAY
         /** @type {HTMLElement} */
@@ -64,7 +65,6 @@ export class TimerCard extends Card {
         this.removeTimerBtn = this.cardElement.querySelector('.remove-timer-btn');
 
         // SLIDERS & THEIR LABELS
-
         /** @type {HTMLInputElement} */
         this.timerMinutesRange = this.cardElement.querySelector('.timer-minutes-range');
 
@@ -78,7 +78,6 @@ export class TimerCard extends Card {
         this.timerSecondsValue = this.cardElement.querySelector('.timer-seconds-value');
 
         // TIMER OPTIONS SECTION
-
         /** @type {HTMLInputElement} */
         this.hideOptionsToggle = this.cardElement.querySelector('.hide-timer-options-toggle');
 
@@ -96,7 +95,6 @@ export class TimerCard extends Card {
 
 
         // START ACTIONS SECTION
-
         /** @type {HTMLElement} */
         this.startActionContainer = this.cardElement.querySelector('.start-action-container');
 
@@ -108,7 +106,6 @@ export class TimerCard extends Card {
 
 
         // END ACTIONS SECTION
-
         /** @type {HTMLElement} */
         this.endActionContainer = this.cardElement.querySelector('.end-action-container');
 
@@ -119,16 +116,13 @@ export class TimerCard extends Card {
         this.timerEndActionSelect = this.cardElement.querySelector('.timer-end-action');
 
 
+        // DEBOUNCED SAVE FOR SLIDER VALUES
+        this.debouncedSliderSave = debounce(() => this.handleSliderChange(), 200)
+
         // BOUND EVENT HANDLER - why?? I forget??
         this.boundHandleButtonDeletion = this.handleButtonDeletion.bind(this);
 
         this._initialize();
-    }
-
-    _initialize(){
-        this._registerCommands();
-        this._attachListeners();
-        this.updateUI();
     }
 
     _registerCommands() {
@@ -143,6 +137,14 @@ export class TimerCard extends Card {
             preload: null,
             execute: this.reset
         })
+    }
+
+    _initialize(){
+        this._attachListeners();
+        this.updateUI();
+        if (this.data.isRunning){
+            this.tick();
+        }
     }
 
     _attachListeners() {
@@ -167,15 +169,14 @@ export class TimerCard extends Card {
 
 
         // SLIDERS
-        const debounceSliderChange = debounce(() => this.handleSliderChange(), 200)
 
         this.timerMinutesRange.addEventListener('input', () => {
             this._updateDisplayTextFromSliders();
-            debounceSliderChange();
+            this.debouncedSliderSave()
         });
         this.timerSecondsRange.addEventListener('input', () => {
             this._updateDisplayTextFromSliders();
-            debounceSliderChange();
+            this.debouncedSliderSave();
         });
        
 
@@ -270,11 +271,19 @@ export class TimerCard extends Card {
      * This is lightweight and does NOT re-prepare actions.
      */
     async handleSettingsChange() {
+        //@ts-ignore
+        const newMode = this.cardElement.querySelector('.timer-mode-radio:checked').value
+
+        if (newMode != this.data.mode && !this.data.isRunning){
+            this.reset();
+        }
+
         await this.updateData({
             optionsHidden: this.hideOptionsToggle.checked,
             isLooping: this.loopCheckbox.checked,
-            mode: this.cardElement.querySelector('.timer-mode-radio:checked').value,
+            mode: newMode,
         });
+
         this.updateUI();
     }
 
@@ -285,8 +294,6 @@ export class TimerCard extends Card {
         await this.updateData({
             targetDurationMs: (minutes * 60 + seconds) * 1000,
         });
-
-        this.updateUI();
     }
 
     /**
@@ -318,7 +325,7 @@ export class TimerCard extends Card {
         }
 
         this._updateDisplayTextFromSliders();
-        this.debouncedSave();
+        this.debouncedSliderSave();
     }
 
     /**
@@ -328,7 +335,10 @@ export class TimerCard extends Card {
     _updateDisplayTextFromSliders() {
         const minutes = parseInt(this.timerMinutesRange.value, 10);
         const seconds = parseInt(this.timerSecondsRange.value, 10);
-        this.timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        if (this.data.mode === 'timer'){
+            this.timerDisplay.textContent =
+            `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
         // Also sync the number input box next to the slider
         this.timerMinutesValue.value = String(minutes);
         this.timerSecondsValue.value = String(seconds);
@@ -457,6 +467,39 @@ export class TimerCard extends Card {
         this.animationFrameId = requestAnimationFrame(() => this.tick());
     }
 
+        
+
+    renderDisplay(currentElapsed = this.data.elapsedMs) {
+        let msToDisplay;
+        if (this.data.mode === 'timer') {
+            msToDisplay = Math.max(0, this.data.targetDurationMs - currentElapsed);
+        } else { // stopwatch
+            msToDisplay = currentElapsed;
+        }
+
+        // Round UP seconds because this is a soundboard for live broadcast, so it's important to USE the entire last second - displaying 1 rather than 0 helps with that.
+        const totalSeconds = Math.ceil(msToDisplay / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        this.timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
+        if (this.data.mode === 'timer' && msToDisplay > 0 && msToDisplay < 3000) {
+            const progress = 100 - (msToDisplay / 3000) * 100;
+            this.timerProgressOverlay.style.width = `${progress}%`;
+        } else {
+            this.timerProgressOverlay.style.width = '0%';
+        }
+
+        // Apply glow effect for finished states
+        const isStopwatchFinished = this.data.mode === 'stopwatch' && currentElapsed >= this.data.targetDurationMs && this.data.targetDurationMs > 0;
+        const isTimerFinished = this.data.mode === 'timer' && (this.data.targetDurationMs - currentElapsed) <= 0;
+        const shouldGlow = isStopwatchFinished || (isTimerFinished && !this.data.isLooping);
+
+        this.cardElement.classList.toggle('hover-glow', shouldGlow);
+        this.timerDisplay.classList.toggle('finished', shouldGlow);
+
+    }
+
 
     updateUI() {
         // Sync UI controls with the state object
@@ -491,41 +534,6 @@ export class TimerCard extends Card {
         this.startActionLabel.textContent = this.data.isLooping ? 'Play Sound:' : 'Start with:';
 
         this.renderDisplay();
-        console.log("updateUI Called!")
-
-    }
-
-    
-
-    renderDisplay(currentElapsed = this.data.elapsedMs) {
-        let msToDisplay;
-        if (this.data.mode === 'timer') {
-            msToDisplay = Math.max(0, this.data.targetDurationMs - currentElapsed);
-        } else { // stopwatch
-            msToDisplay = currentElapsed;
-        }
-
-        // Round UP seconds because this is a soundboard for live broadcast, so it's important to USE the entire last second - displaying 1 rather than 0 helps with that.
-        const totalSeconds = Math.ceil(msToDisplay / 1000);
-        const minutes = Math.floor(totalSeconds / 60);
-        const seconds = totalSeconds % 60;
-        this.timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-
-        if (this.data.mode === 'timer' && msToDisplay > 0 && msToDisplay < 3000) {
-            const progress = 100 - (msToDisplay / 3000) * 100;
-            this.timerProgressOverlay.style.width = `${progress}%`;
-        } else {
-            this.timerProgressOverlay.style.width = '0%';
-        }
-
-        // Apply glow effect for finished states
-        const isStopwatchFinished = this.data.mode === 'stopwatch' && currentElapsed >= this.data.targetDurationMs && this.data.targetDurationMs > 0;
-        const isTimerFinished = this.data.mode === 'timer' && (this.data.targetDurationMs - currentElapsed) <= 0;
-        const shouldGlow = isStopwatchFinished || (isTimerFinished && !this.data.isLooping);
-
-        this.cardElement.classList.toggle('hover-glow', shouldGlow);
-        this.timerDisplay.classList.toggle('finished', shouldGlow);
-        console.log("rendering display")
 
     }
 

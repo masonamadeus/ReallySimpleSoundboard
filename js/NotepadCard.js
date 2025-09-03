@@ -17,7 +17,8 @@ export class NotepadCard extends Card {
     }
 
     constructor(cardData, soundboardManager, dbInstance) {
-        super(cardData, soundboardManager, dbInstance)
+        const completeCardData = { ...NotepadCard.Default(), ...cardData }
+        super(completeCardData, soundboardManager, dbInstance)
 
         // DOM Elements
         //@ts-ignore

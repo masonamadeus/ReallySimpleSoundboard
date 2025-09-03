@@ -6,6 +6,8 @@ class PreloadTicket {
      * @param {object} [options.args={}] - Any specific arguments needed for the execute step.
      */
     constructor({ durationMs = 0, args = {} } = {}) {
+
+        // durationMs: the duration in milliseconds
         if (typeof durationMs !== 'number') {
             console.error('Invalid CommandTicket: durationMs must be a number.');
             this.durationMs = 0;
@@ -13,6 +15,7 @@ class PreloadTicket {
             this.durationMs = durationMs;
         }
 
+        // args: arguments for the execute function
         if (typeof args !== 'object' || args === null) {
             console.error('Invalid CommandTicket: args must be an object.');
             this.args = {};
