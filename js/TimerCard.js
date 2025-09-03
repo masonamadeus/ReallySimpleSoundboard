@@ -1,11 +1,11 @@
-import { appEvents, debounce, randomButNot } from "./helper-functions.js";
+import { debounce, randomButNot } from "./helper-functions.js";
 import { RSSCard } from "./RSSCard.js";
+import { MSG } from './MSG.js';
 
 export class TimerCard extends RSSCard {
 
-    static getInitialData(newId) {
+    static Default() {
         return {
-            id: newId,
             type: 'timer',
             title: 'New Timer',
             targetDurationMs: 30000, // Changed to 30s default
@@ -17,14 +17,14 @@ export class TimerCard extends RSSCard {
 
             // --- UNIFIED STATE OBJECTS ---
             startAction: {
-                command: "", // The raw JSON string from the <option> value
+                commandId: "", // The raw JSON string from the <option> value
                 durationMs: 0,
-                triggered: false
+                args: {}
             },
             endAction: {
-                command: "", // The raw JSON string from the <option> value
+                commandId: "", // The raw JSON string from the <option> value
                 durationMs: 0,
-                triggered: false
+                args: {}
             },
 
         };
@@ -32,13 +32,6 @@ export class TimerCard extends RSSCard {
 
     get templateId() {
         return 'timer-card-template';
-    }
-
-    get commands() {
-        return [
-            { action: 'handlePlayPause', name: 'Start/Pause Timer' },
-            { action: 'reset', name: 'Reset Timer' }
-        ];
     }
 
     constructor(cardData, soundboardManager, dbInstance) {
@@ -102,7 +95,7 @@ export class TimerCard extends RSSCard {
         });
 
 
-        // START SOUNDS SECTION
+        // START ACTIONS SECTION
 
         /** @type {HTMLElement} */
         this.startActionContainer = this.cardElement.querySelector('.start-action-container');
@@ -114,7 +107,7 @@ export class TimerCard extends RSSCard {
         this.timerStartActionSelect = this.cardElement.querySelector('.timer-start-action');
 
 
-        // END SOUNDS SECTION
+        // END ACTIONS SECTION
 
         /** @type {HTMLElement} */
         this.endActionContainer = this.cardElement.querySelector('.end-action-container');
@@ -123,27 +116,45 @@ export class TimerCard extends RSSCard {
         this.endActionLabel = this.cardElement.querySelector('.end-action-label');
 
         /** @type {HTMLSelectElement} */
-        this.timerEndSoundSelect = this.cardElement.querySelector('.timer-end-action');
+        this.timerEndActionSelect = this.cardElement.querySelector('.timer-end-action');
 
 
-        // BOUND EVENT HANDLERS
+        // BOUND EVENT HANDLER - why?? I forget??
         this.boundHandleButtonDeletion = this.handleButtonDeletion.bind(this);
-        this.boundPopulateSelectors = this._populateCommandSelectors.bind(this);
 
-        // BOUND DEBOUNCED SAVE
-        this.debouncedSave = debounce(() => this.handleControlChange(), 250);
+        this._initialize();
+    }
 
-        this.attachListeners();
+    _initialize(){
+        this.onCommandsRefreshed = (commands) => {
+            this.populateCommandSelectors(commands);
+        };
+        this._registerCommands();
+        this._attachListeners();
         this.updateUI();
     }
 
+    _registerCommands() {
+        this.registerCommand({
+            name: "Play/Pause",
+            preload: null,
+            execute: this.handlePlayPause
+        });
 
-    attachListeners() {
+        this.registerCommand({
+            name: "Reset",
+            preload: null,
+            execute: this.reset
+        })
+    }
+
+
+    _attachListeners() {
         this.startPauseBtn.addEventListener('click', () => this.handlePlayPause());
         this.resetBtn.addEventListener('click', () => this.reset());
         this.removeTimerBtn.addEventListener('click', () => this._handleDeleteCard());
 
-        // debounce the sliders to prevent unnecessary database writes.
+        this.debouncedSave = debounce(() => this.handleSettingsChange(), 250); // debounce the save
         this.timerMinutesRange.addEventListener('input', () => {
             this._updateDisplayTextFromSliders();
             this.debouncedSave();
@@ -155,21 +166,20 @@ export class TimerCard extends RSSCard {
 
         // These don't need debouncing unless someone is using AHK to be a psychopath lol
         const immediateChangeControls = [
-            this.hideOptionsToggle, this.loopCheckbox,
-            this.timerStartActionSelect, this.timerEndSoundSelect
+            this.hideOptionsToggle, this.loopCheckbox
         ];
-        immediateChangeControls.forEach(el => el.addEventListener('change', () => this.handleControlChange()));
-        this.modeRadios.forEach(radio => radio.addEventListener('change', () => this.handleControlChange()));
+        immediateChangeControls.forEach(el => el.addEventListener('change', () => this.handleSettingsChange()));
+        this.modeRadios.forEach(radio => radio.addEventListener('change', () => this.handleSettingsChange()));
+
+        // The action dropdowns use their dedicated, more expensive handler.
+        this.timerStartActionSelect.addEventListener('change', () => this.handleActionChange());
+        this.timerEndActionSelect.addEventListener('change', () => this.handleActionChange());
 
         // text editable minutes/seconds (these trigger on 'blur', which is fine)
         this.timerMinutesValue.addEventListener('blur', (e) => this.handleManualTimeInput(e));
         this.timerSecondsValue.addEventListener('blur', (e) => this.handleManualTimeInput(e));
 
-
-        
-        appEvents.on('cardDeleted', this.boundHandleButtonDeletion);
-
-        appEvents.on('update:commands', this.boundPopulateSelectors);
+        MSG.on(MSG.is.SOUNDBOARD_DELETED_CARD, this.boundHandleButtonDeletion);
     }
 
     destroy() {
@@ -177,30 +187,143 @@ export class TimerCard extends RSSCard {
         if (this.animationFrameId) {
             cancelAnimationFrame(this.animationFrameId);
         }
-        appEvents.off('cardDeleted', this.boundHandleButtonDeletion);
-        appEvents.off('update:commands', this.boundPopulateSelectors)
+        MSG.off(MSG.is.SOUNDBOARD_DELETED_CARD, this.boundHandleButtonDeletion);
+        super.destroy();
     }
 
     // ================================================================
     // Event Handlers
     // ================================================================
 
-    startTimer() {
-        // 1. Update the state with the current start time
-        this.updateData({ startTime: Date.now() });
+    populateCommandSelectors(availableCommands) {
+        const startActionSelect = this.timerStartActionSelect;
+        const endActionSelect = this.timerEndActionSelect;
 
-        // 2. Execute the start action if it exists and hasn't been triggered yet
-        const startAction = this.data.startAction;
-        if (startAction.command && !startAction.triggered) {
-            this._executeCommand(startAction.command);
-            // Update the state to mark it as triggered
-            const newStartActionState = { ...startAction, triggered: true };
-            this.updateData({ startAction: newStartActionState });
+        startActionSelect.innerHTML = '<option value="">None</option>';
+        endActionSelect.innerHTML = '<option value="">None</option>';
+
+        // The 'command' variable is now one of our rich Command Objects
+        availableCommands.forEach(command => {
+            // A timer cannot trigger its own commands
+            if (command.targetCard === this.id) return;
+
+            const option = document.createElement('option');
+            // Use the new properties for display text and value
+            option.textContent = command.name;
+            option.value = command.id;
+
+            startActionSelect.add(option);
+            endActionSelect.add(option.cloneNode(true));
+        });
+
+        // Restore the selection using the correct property from our state
+        startActionSelect.value = this.data.startAction.commandId || "";
+        endActionSelect.value = this.data.endAction.commandId || "";
+    }
+
+
+    async _prepareAction(actionType, commandId) {
+        // If the selection is "None", clear the action
+        if (!commandId) {
+            return this.updateData({ [actionType]: { commandId: "", durationMs: 0, indexToPlay: 0, triggered: false } });
         }
 
-        // 3. Start the timer loop
-        this.tick();
+        let durationMs = 0;
+        let args = {};
+
+        const ticket = await this.preloadCommand(commandId);
+
+        if (ticket){
+            durationMs = ticket.durationMs;
+            args = ticket.args;
+        }
+
+        // Save the new, simple state.
+        await this.updateData({
+            [actionType]: {
+                commandId: commandId,
+                durationMs: durationMs,
+                args: args,
+                triggered: false
+            }
+        });
     }
+
+    /**
+     * Handles changes to settings like duration, looping, or mode.
+     * This is lightweight and does NOT re-prepare actions.
+     */
+    async handleSettingsChange() {
+        const minutes = parseInt(this.timerMinutesRange.value, 10);
+        const seconds = parseInt(this.timerSecondsRange.value, 10);
+        
+        await this.updateData({
+            targetDurationMs: (minutes * 60 + seconds) * 1000,
+            optionsHidden: this.hideOptionsToggle.checked,
+            isLooping: this.loopCheckbox.checked,
+            mode: this.cardElement.querySelector('.timer-mode-radio:checked').value,
+        });
+
+        this.updateUI();
+    }
+
+    /**
+     * Handles changes ONLY from the start/end action dropdowns.
+     * This is the ONLY place we should prepare actions.
+     */
+    async handleActionChange() {
+        const newStartCommandId = this.timerStartActionSelect.value;
+        const newEndCommandId = this.timerEndActionSelect.value;
+
+        // Run both async preparations in parallel.
+        await Promise.all([
+            this._prepareAction('startAction', newStartCommandId),
+            this._prepareAction('endAction', newEndCommandId)
+        ]);
+        
+        // No need to call updateUI() here, as _prepareAction saves the state
+        // and doesn't change any other visual element.
+    }
+
+    handleManualTimeInput(e) {
+        const value = parseInt(e.target.value, 10);
+        const type = e.target.dataset.type;
+
+        if (type === 'minutes') {
+            const validatedValue = isNaN(value) ? 0 : Math.max(0, Math.min(value, 90));
+            this.timerMinutesRange.value = String(validatedValue);
+        } else if (type === 'seconds') {
+            const validatedValue = isNaN(value) ? 0 : Math.max(0, Math.min(value, 59));
+            this.timerSecondsRange.value = String(validatedValue);
+        }
+
+        this._updateDisplayTextFromSliders();
+        this.debouncedSave();
+    }
+
+    handleButtonDeletion({ deletedId }) {
+    let needsUpdate = false;
+    let newStartAction = { ...this.data.startAction };
+    let newEndAction = { ...this.data.endAction };
+
+    // Check if the start action's command is tied to the deleted card
+    if (newStartAction.commandId && newStartAction.commandId.startsWith(deletedId)) {
+        newStartAction = { commandId: "", durationMs: 0, indexToPlay: 0, triggered: false };
+        needsUpdate = true;
+    }
+
+    // Check if the end action's command is tied to the deleted card
+    if (newEndAction.commandId && newEndAction.commandId.startsWith(deletedId)) {
+        newEndAction = { commandId: "", durationMs: 0, indexToPlay: 0, triggered: false };
+        needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+        this.updateData({ startAction: newStartAction, endAction: newEndAction }).then(() => {
+            this.updateUI(); // Refresh the dropdowns to show "None"
+        });
+    }
+}
 
     handlePlayPause() {
         const isFinished = this.data.mode === 'timer' && this.data.elapsedMs >= this.data.targetDurationMs;
@@ -225,6 +348,30 @@ export class TimerCard extends RSSCard {
         this.updateUI();
     }
 
+
+
+    // ================================================================
+    // Core Timer Logic & Rendering
+    // ================================================================
+
+    startTimer() {
+        // 1. Update the state with the current start time
+        this.updateData({ startTime: Date.now() });
+
+        // 2. Execute the start action if it exists and hasn't been triggered yet
+        const startAction = this.data.startAction;
+        if (startAction.commandId && !startAction.triggered) {
+            this.executeCommand(startAction.commandId, startAction.args);
+            // Update the state to mark it as triggered
+            const newStartActionState = { ...startAction, triggered: true };
+            this.updateData({ startAction: newStartActionState });
+        }
+
+        // 3. Start the timer loop
+        this.tick();
+    }
+
+
     reset() {
         if (this.animationFrameId) {
             cancelAnimationFrame(this.animationFrameId);
@@ -245,78 +392,6 @@ export class TimerCard extends RSSCard {
         this.updateUI();
     }
 
-    
-    handleControlChange() {
-        // Read all UI values
-        const minutes = parseInt(this.timerMinutesRange.value, 10);
-        const seconds = parseInt(this.timerSecondsRange.value, 10);
-        const newTargetDurationMs = (minutes * 60 + seconds) * 1000;
-
-        const newStartCommand = this.timerStartActionSelect.value;
-        const newEndCommand = this.timerEndSoundSelect.value;
-
-        // Update the simple data properties directly
-        this.updateData({
-            targetDurationMs: newTargetDurationMs,
-            optionsHidden: this.hideOptionsToggle.checked,
-            isLooping: this.loopCheckbox.checked,
-            mode: this.cardElement.querySelector('.timer-mode-radio:checked').value,
-        });
-
-        // Prepare the actions, which will update their own state objects
-        this._prepareAction('startAction', newStartCommand);
-        this._prepareAction('endAction', newEndCommand);
-
-        this.updateUI();
-    }
-
-    handleManualTimeInput(e) {
-        const value = parseInt(e.target.value, 10);
-        const type = e.target.dataset.type;
-
-        if (type === 'minutes') {
-            const validatedValue = isNaN(value) ? 0 : Math.max(0, Math.min(value, 90));
-            this.timerMinutesRange.value = String(validatedValue);
-        } else if (type === 'seconds') {
-            const validatedValue = isNaN(value) ? 0 : Math.max(0, Math.min(value, 59));
-            this.timerSecondsRange.value = String(validatedValue);
-        }
-
-        this._updateDisplayTextFromSliders();
-        this.debouncedSave();
-    }
-
-    handleButtonDeletion({ deletedId }) {
-        let needsUpdate = false;
-        let newStartAction = this.data.startAction;
-        let newEndAction = this.data.endAction;
-
-        if (this.data.startAction.command) {
-            const command = JSON.parse(this.data.startAction.command);
-            if (command.targetId === deletedId) {
-                newStartAction = { command: "", durationMs: 0, triggered: false };
-                needsUpdate = true;
-            }
-        }
-
-        if (this.data.endAction.command) {
-            const command = JSON.parse(this.data.endAction.command);
-            if (command.targetId === deletedId) {
-                newEndAction = { command: "", durationMs: 0, triggered: false };
-                needsUpdate = true;
-            }
-        }
-
-        if (needsUpdate) {
-            this.updateData({ startAction: newStartAction, endAction: newEndAction });
-            this.updateUI(); // Refresh the dropdowns to show "None"
-        }
-    }
-
-    // ================================================================
-    // Core Timer Logic & Rendering
-    // ================================================================
-
     tick() {
         if (!this.data.isRunning) return;
 
@@ -325,9 +400,9 @@ export class TimerCard extends RSSCard {
 
         // --- Unified End Action Trigger Logic ---
         const endAction = this.data.endAction;
-        if (endAction.command && !endAction.triggered && remainingMs <= endAction.durationMs) {
-            this._executeCommand(endAction.command);
-
+        if (endAction.commandId && !endAction.triggered && remainingMs <= endAction.durationMs) {
+            MSG.log(`Triggering End Action from ${this.data.title}`)
+            this.executeCommand(endAction.commandId, endAction.args);
             // Use the correct syntax to update the nested 'triggered' flag
             const newEndActionState = { ...endAction, triggered: true };
             this.updateData({ endAction: newEndActionState });
@@ -349,53 +424,6 @@ export class TimerCard extends RSSCard {
         this.animationFrameId = requestAnimationFrame(() => this.tick());
     }
 
-    _executeCommand(commandString) {
-        if (!commandString) return;
-        try {
-            const commandData = JSON.parse(commandString);
-            // Dispatch the clean event with only the necessary data
-            appEvents.dispatch('card:triggerAction', {
-                targetId: commandData.targetId,
-                action: commandData.action
-            });
-        } catch (e) {
-            console.error("Failed to execute command:", e);
-        }
-    }
-
-    /**
-    * Processes a command string from the UI, determines its duration, 
-    * and saves the complete action object to the database.
-    * @param {'startAction' | 'endAction'} actionType 
-    * @param {string} commandString The JSON string from the <option> value.
-    */
-    async _prepareAction(actionType, commandString) {
-        if (!commandString) {
-            return this.updateData({ [actionType]: { command: "", durationMs: 0, triggered: false } });
-        }
-
-        const command = JSON.parse(commandString);
-        let durationMs = 0;
-
-        if (command.hasDuration) {
-            const soundInfo = await new Promise(resolve => {
-                // Use the clearer event name
-                appEvents.dispatch('request:commandDuration', {
-                    buttonId: command.targetId,
-                    callback: (info) => resolve(info)
-                });
-            });
-            durationMs = soundInfo.duration;
-        }
-
-        this.updateData({
-            [actionType]: {
-                command: commandString,
-                durationMs: durationMs,
-                triggered: false
-            }
-        });
-    }
 
     updateUI() {
         // Sync UI controls with the state object
@@ -404,7 +432,6 @@ export class TimerCard extends RSSCard {
         this.timerSecondsRange.value = String(Math.floor((this.data.targetDurationMs % 60000) / 1000));
 
         this.timerMinutesValue.value = this.timerMinutesRange.value;
-
         this.timerSecondsValue.value = this.timerSecondsRange.value;
 
         this.hideOptionsToggle.checked = this.data.optionsHidden;
@@ -418,8 +445,8 @@ export class TimerCard extends RSSCard {
         timerModeRadio.checked = true;
 
 
-        this.timerStartActionSelect.value = this.data.startAction.command || "";
-        this.timerEndSoundSelect.value = this.data.endAction.command || "";
+        this.timerStartActionSelect.value = this.data.startAction.commandId || "";
+        this.timerEndActionSelect.value = this.data.endAction.commandId || "";
 
         // Update dynamic UI elements
         this.startPauseBtn.textContent = this.data.isRunning ? 'Pause' : 'Start';
@@ -431,6 +458,7 @@ export class TimerCard extends RSSCard {
         this.startActionLabel.textContent = this.data.isLooping ? 'Play Sound:' : 'Start with:';
 
         this.renderDisplay();
+        console.log("updateUI Called!")
 
     }
 
@@ -475,7 +503,7 @@ export class TimerCard extends RSSCard {
 
         this.cardElement.classList.toggle('hover-glow', shouldGlow);
         this.timerDisplay.classList.toggle('finished', shouldGlow);
-
+        console.log("rendering display")
 
     }
 

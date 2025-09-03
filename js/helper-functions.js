@@ -177,6 +177,14 @@ export function getAdvancedContrastColor(bgHex) {
 }
 
 export function getContrastColor(hexColor) {
+
+    if (hexColor.startsWith('var(')) {
+            // Extract the variable name (e.g., --accent-color)
+            const cssVarName = hexColor.match(/--[\w-]+/)[0];
+            // Resolve its computed value (e.g., #ff00ff)
+            hexColor = getComputedStyle(document.documentElement).getPropertyValue(cssVarName).trim();
+        }
+
     // 1. Remove '#' and convert hex to R, G, B numbers
     const r = parseInt(hexColor.substr(1, 2), 16);
     const g = parseInt(hexColor.substr(3, 2), 16);
@@ -220,35 +228,19 @@ export function randomButNot(min, max, notThis) {
     return value;
 }
 
-class EventManager {
-    constructor() {
-        this.events = {};
-    }
-
-    // Subscribe to an event
-    on(eventName, listener) {
-        if (!this.events[eventName]) {
-            this.events[eventName] = [];
-        }
-        this.events[eventName].push(listener);
-    }
-
-    // Unsubscribe from an event
-    off(eventName, listenerToRemove) {
-        if (!this.events[eventName]) return;
-
-        this.events[eventName] = this.events[eventName].filter(
-            listener => listener !== listenerToRemove
-        );
-    }
-
-    // Dispatch an event
-    dispatch(eventName, data) {
-        if (!this.events[eventName]) return;
-
-        this.events[eventName].forEach(listener => listener(data));
-    }
+export function getAudioDuration(arrayBuffer) {
+    return new Promise((resolve, reject) => {
+        const blob = new Blob([arrayBuffer]);
+        const audio = new Audio();
+        const objectURL = URL.createObjectURL(blob);
+        audio.addEventListener('loadedmetadata', () => {
+            URL.revokeObjectURL(objectURL);
+            resolve(audio.duration*1000); // Returns duration in seconds, so we manually multiply to milliseconds
+        }, { once: true });
+        audio.addEventListener('error', () => {
+            URL.revokeObjectURL(objectURL);
+            reject(new Error('Failed to load audio for duration calculation.'));
+        }, { once: true });
+        audio.src = objectURL;
+    });
 }
-
-// Create a single, shared instance for the entire application
-export const appEvents = new EventManager();

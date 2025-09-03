@@ -6,9 +6,10 @@ import { SoundboardDB } from './SoundboardDB.js';
 import { BoardManager } from './BoardManager.js';
 import { ThemeManager } from './ThemeManager.js';
 import {
-    appEvents, arrayBufferToBase64, base64ToArrayBuffer,
+    getAudioDuration, arrayBufferToBase64, base64ToArrayBuffer,
     loadGoogleFonts, slugify, formatIdAsTitle, formatBytes
 } from './helper-functions.js';
+import { MSG } from './MSG.js';
 
 // ====================================================================
 // SECTION: Application Manager Class
@@ -27,33 +28,43 @@ export class SoundboardManager {
         this.isRearranging = false;
         this.draggedItem = null;
         this.themeManager = new ThemeManager(this.db, new SoundboardDB('default'), this);
+
         this.boardManager = new BoardManager();
+
+        this.migrationQueue = [];
+        this.isMigrating = false;
+
+        this.managerAPI = {
+            getCardById: this.getCardById.bind(this),
+            showConfirmModal: this.showConfirmModal.bind(this),
+            removeCard: this.removeCard.bind(this),
+            handleCardCommand: this.handleCardCommand.bind(this),
+            getIsRearranging: () => this.isRearranging // Use a getter for properties
+        };
+
     }
 
     async initialize() {
         loadGoogleFonts(['Wellfleet']);
         await this.db.openDB();
 
+        // I SUSPECT THIS SHOULD MOVE TO BOARDMANAGER
         const urlParams = new URLSearchParams(window.location.search);
         const boardId = urlParams.get('board') || 'default';
         await BoardManager.addBoardId(boardId);
 
         await this._loadBoardData();
         this.attachGlobalEventListeners();
-        // The grid is rendered by _loadBoardData now
     }
 
-    // --- REFACTOR: Streamline the entire loading process ---
     async _loadBoardData() {
         await this.loadTitle();
         await this.themeManager.init();
         await this.initBugMovement();
-
-        // This single method now handles loading all card data and the layout.
         await this.loadCardsAndLayout();
     }
 
-    
+
     async loadCardsAndLayout() {
         this.soundboardGrid.innerHTML = ''; // Clear the grid
         this.allCards.clear(); // Clear the instance map
@@ -68,13 +79,13 @@ export class SoundboardManager {
                 let cardInstance;
                 switch (cardData.type) {
                     case 'sound':
-                        cardInstance = new SoundCard(cardData, this, this.db);
+                        cardInstance = new SoundCard(cardData, this.managerAPI, this.db);
                         break;
                     case 'notepad':
-                        cardInstance = new NotepadCard(cardData, this, this.db);
+                        cardInstance = new NotepadCard(cardData, this.managerAPI, this.db);
                         break;
                     case 'timer':
-                        cardInstance = new TimerCard(cardData, this, this.db);
+                        cardInstance = new TimerCard(cardData, this.managerAPI, this.db);
                         break;
                     default:
                         console.error(`Unknown card type: ${cardData.type}`);
@@ -90,12 +101,8 @@ export class SoundboardManager {
                 this.gridLayout.push({ type: 'control', id: 'control-card' });
                 await this._saveLayout();
             }
-            
-            this.renderGrid();
-            
-            // NEW: After all cards are instantiated and rendered, broadcast commands.
-            this._broadcastAvailableCommands(); 
 
+            this.renderGrid();
         } catch (error) {
             console.error("Failed to load cards and layout:", error);
         }
@@ -114,84 +121,32 @@ export class SoundboardManager {
                     cardElement = cardInstance.cardElement;
                 }
             }
-            
+
             if (cardElement) {
                 this.soundboardGrid.appendChild(cardElement);
             }
         });
-        
-        // REMOVED: The old, inefficient way of updating timers one-by-one is gone.
-        // We now use the event broadcast pattern.
+
+        this.broadcastAvailableCommands(); // Notify all cards of the current commands
     }
 
-    /**
-     * Gathers all available commands from every card instance and broadcasts them
-     * via a single global event.
-     * @private
-     */
-    _broadcastAvailableCommands() {
-        const allAvailableCommands = [];
-        for (const card of this.allCards.values()) {
-            // Use the `commands` getter from the RSSCard interface
-            const cardCommands = card.commands; 
-            
-            if (cardCommands && cardCommands.length > 0) {
-                allAvailableCommands.push({
-                    cardId: card.id,
-                    cardName: card.data.title, // Use the user-facing title
-                    cardType: card.data.type,
-                    commands: cardCommands
-                });
-            }
-        }
-        
-        // Dispatch the single event with the complete payload.
-        appEvents.dispatch('update:commands', allAvailableCommands);
+    toggleRearrangeMode() {
+        this.isRearranging = !this.isRearranging;
+        const btn = document.getElementById('rearrange-mode-btn');
+        const grid = document.getElementById('soundboard-grid');
+        grid.classList.toggle('rearrange-mode', this.isRearranging);
+        btn.textContent = this.isRearranging ? 'Done Rearranging' : 'Rearrange';
     }
 
-    async addCard(type, initialData = {}) {
-        const newId = `${type}-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
-        let cardData;
-
-        // Create the default data object for the new card
-        switch (type) {
-            case 'sound':
-                cardData = SoundCard.getInitialData(newId);
-                break;
-            case 'notepad':
-                cardData = NotepadCard.getInitialData(newId);
-                break;
-            case 'timer':
-                cardData = TimerCard.getInitialData(newId);
-                break;
-            default:
-                console.error(`Attempted to add unknown card type: ${type}`);
-                return;
-        }
-
-        this.gridLayout.push({ type: type, id: newId });
-        
-        await Promise.all([
-            this.db.save(newId, cardData),
-            this._saveLayout()
-        ]);
-        // 08262025
-        // Instead of reloading everything, we can instantiate the card and broadcast.
-        // For simplicity and consistency, the full reload is fine, but for optimization:
-        // 1. Create the new card instance.
-        // 2. Add it to `this.allCards`.
-        // 3. Append its element to the grid.
-        // 4. Then, call `_broadcastAvailableCommands()` to update all timers.
-        // The current implementation re-runs loadCardsAndLayout, which works perfectly.
-        await this.loadCardsAndLayout();
-    }
 
 
 
     async createNewBoard() {
+        // @ts-ignore
         const input = document.getElementById('new-board-name-input');
         if (input == null) { return; }
+        //@ts-ignore
         const boardName = input.value.trim();
 
         if (!boardName) {
@@ -214,6 +169,8 @@ export class SoundboardManager {
         window.location.href = `?board=${boardId}`;
     }
 
+
+    // SHOULD THIS ALSO BE IN BOARDMANAGER?
     async loadTitle() {
         const titleData = await this.db.get('soundboard-title');
 
@@ -254,17 +211,27 @@ export class SoundboardManager {
 
 
     // ================================================================
-    // Event Handling -- will need a lot of cleanup after refactor is finished
+    // #region Event Handling -- will need a lot of cleanup after refactor is finished
     // ================================================================
 
     attachGlobalEventListeners() {
 
+        // CARD ACTION ROUTER
+        MSG.on(MSG.is.CARD_COMMANDS_CHANGED, this.broadcastAvailableCommands.bind(this));
+        MSG.on(MSG.is.CARD_MIGRATION_NEEDED,(task) => this.handleCardMigration(task))
+        
+
+
+
+        // SOUNDBOARD TITLE
         document.getElementById('soundboard-title').addEventListener('blur', (e) => {
+            //@ts-ignore
             const newTitle = e.target.textContent.trim();
             document.title = newTitle + " | B&M RSS";
             this.db.save('soundboard-title', { id: 'soundboard-title', title: newTitle });
         });
 
+        // DRAG HANDLERS
         this.soundboardGrid.addEventListener('dragstart', (e) => this.handleDragStart(e));
         this.soundboardGrid.addEventListener('dragover', (e) => this.handleDragOver(e));
         this.soundboardGrid.addEventListener('dragenter', (e) => this.handleDragEnter(e));
@@ -272,7 +239,17 @@ export class SoundboardManager {
         this.soundboardGrid.addEventListener('drop', (e) => this.handleDrop(e));
         this.soundboardGrid.addEventListener('dragend', (e) => this.handleDragEnd(e));
 
-        // NEW ADD CARDS METHOD
+
+        // CONTROL CARD LISTENERS
+
+        document.getElementById('flip-to-settings-btn').addEventListener('click', () => {
+            this.controlCardElement.classList.add('is-flipped');
+        });
+
+        document.getElementById('flip-to-main-btn').addEventListener('click', () => {
+            this.controlCardElement.classList.remove('is-flipped');
+        });
+
         document.getElementById('add-sound-btn').addEventListener('click', () => {
             this.addCard('sound');
         });
@@ -282,27 +259,27 @@ export class SoundboardManager {
         document.getElementById('add-timer-btn').addEventListener('click', () => {
             this.addCard('timer');
         });
-
-
         document.getElementById('rearrange-mode-btn').addEventListener('click', () => this.toggleRearrangeMode());
         document.getElementById('download-config-btn').addEventListener('click', () => this.downloadConfig());
         document.getElementById('upload-config-btn').addEventListener('click', () => document.getElementById('upload-config-input').click());
         document.getElementById('upload-config-input').addEventListener('change', (e) => this.uploadConfig(e));
         document.getElementById('db-manager-btn').addEventListener('click', () => this.showDbManagerModal());
-
         document.getElementById('create-new-board-btn').addEventListener('click', () => this.createNewBoard());
 
         // listener to close the board switcher modal when clicking the background
         document.getElementById('board-switcher-modal').addEventListener('click', (event) => {
+            //@ts-ignore
             if (event.target.id === 'board-switcher-modal') {
                 document.getElementById('board-switcher-modal').style.display = 'none';
             }
         });
 
         document.getElementById('db-manager-modal').addEventListener('click', (event) => {
+            //@ts-ignore
             if (event.target.id === 'db-manager-modal') this.closeDbManagerModal();
         });
         document.getElementById('persistent-storage-checkbox').addEventListener('change', (e) => {
+            //@ts-ignore
             if (e.target.checked) {
                 this.requestPersistentStorage();
             }
@@ -320,11 +297,13 @@ export class SoundboardManager {
         });
 
         document.getElementById('help-modal').addEventListener('click', (event) => {
+            //@ts-ignore
             if (event.target.id === 'help-modal') {
                 document.getElementById('help-modal').style.display = 'none';
             }
         });
         document.querySelector('.help-accordion').addEventListener('click', (e) => {
+            //@ts-ignore
             if (e.target.classList.contains('accordion-header')) {
                 const activeHeader = document.querySelector('.accordion-header.active');
                 // Close the already active header if it's not the one that was clicked
@@ -333,8 +312,9 @@ export class SoundboardManager {
                     activeHeader.nextElementSibling.classList.remove('active');
                 }
 
-                // Toggle the clicked header and its content
+                //@ts-ignore Toggle the clicked header and its content 
                 e.target.classList.toggle('active');
+                //@ts-ignore
                 const content = e.target.nextElementSibling;
                 content.classList.toggle('active');
             }
@@ -354,11 +334,17 @@ export class SoundboardManager {
         }
     }
 
-    // DRAG & DROP HANDLERS ===================
+//#endregion
+
+    // #region Drag&Drop Handlers
     handleDragStart(event) {
-        if (!this.isRearranging) return;
+        if (!this.isRearranging || !event.target.closest('.sound-card')) {
+            event.preventDefault();
+            return;
+        }
+
         this.draggedItem = event.target.closest('.sound-card');
-        if (!this.draggedItem) return;
+
         event.dataTransfer.effectAllowed = 'move';
         // Use a generic identifier for the drag data.
         event.dataTransfer.setData('text/plain', this.draggedItem.dataset.cardId);
@@ -419,27 +405,68 @@ export class SoundboardManager {
         }
     }
 
-    toggleRearrangeMode() {
-        this.isRearranging = !this.isRearranging;
-        const btn = document.getElementById('rearrange-mode-btn');
-        const grid = document.getElementById('soundboard-grid');
-        grid.classList.toggle('rearrange-mode', this.isRearranging);
-        btn.textContent = this.isRearranging ? 'Done Rearranging' : 'Rearrange';
 
-        grid.querySelectorAll('.sound-card').forEach(card => {
-            card.setAttribute('draggable', this.isRearranging);
-        });
+    // #region Card Management Methods ======================================
+
+    
+    getCardById(id) {
+        return this.allCards.get(id);
     }
 
+    async addCard(type) {
+        // we should refactor this to not use a map? I want this to be easily extensible for adding new card types.
+        // We will also have to refactor our 'add card' buttons into a more dynamic system, which makes this complex.
+        // additionally, we should have the base card RSSCard class able to create a whole new card with a new ID
+        // if one isn't being loaded from the database. I think that bit should be easy to implement.
 
-    // ================================================================
-    // Global Functionality Methods
-    // ================================================================
+        //@ts-ignore
+        const cardMap = new Map([
+            ['sound', SoundCard],
+            ['notepad', NotepadCard],
+            ['timer', TimerCard]
+        ]);
+
+        const CardClass = cardMap.get(type);
+        if (!CardClass) {
+            console.error(`Unknown Card Type: ${type}`);
+            return;
+        }
+
+        // Generate the new card's data *before* creating the instance. <-- this section has the logic that I think should move to RSSCard.js
+        const newId = await this.db.getNewId(type);
+        // Call the static Default() method correctly on the class.
+        const defaultData = CardClass.Default();
+        const newCardData = {
+            ...defaultData,
+            id: newId,
+            type: type
+        };
+
+        // Create the instance with the correct data and references.
+        // Pass `this` for the manager and `this.db` for the database instance.
+        const newCardInstance = new CardClass(newCardData, this.managerAPI, this.db);
+
+        // Add the new card to our state and update the layout.
+        this.allCards.set(newId, newCardInstance);
+
+        // Insert the new card just before the control card for a predictable UI.
+        const controlCardIndex = this.gridLayout.findIndex(item => item.id === 'control-card');
+        if (controlCardIndex !== -1) {
+            this.gridLayout.splice(controlCardIndex, 0, { type: type, id: newId });
+        } else {
+            this.gridLayout.push({ type: type, id: newId });
+        }
+
+        // Save everything and re-render the grid.
+        await this.db.save(newId, newCardInstance.data);
+        await this._saveLayout();
+        this.renderGrid();
+    }
 
     /**
- * Safely removes a card from the application by its unique ID.
- * @param {string} cardIdToRemove The unique ID of the card to be removed.
- */
+    * Safely removes a card from the application by its unique ID.
+    * @param {string} cardIdToRemove The unique ID of the card to be removed.
+    **/
     async removeCard(cardIdToRemove) {
         const cardInstance = this.allCards.get(cardIdToRemove);
         if (!cardInstance) {
@@ -466,10 +493,50 @@ export class SoundboardManager {
         await this._saveLayout();
 
         // 6. Notify other components (like Timers) that a card was removed.
-        appEvents.dispatch('cardDeleted', { deletedId: cardIdToRemove });
+        MSG.say(MSG.is.SOUNDBOARD_DELETED_CARD, { deletedId: cardIdToRemove });
 
         console.log(`Successfully removed card: ${cardIdToRemove}`);
     }
+
+
+    handleCardCommand(command) {
+        MSG.log(`SoundboardManager.handleCardCommand(${command})`)
+        const targetCard = this.allCards.get(command.targetCard);
+        if (targetCard && typeof targetCard[command.handler] === 'function') {
+            // Use the properties directly from the command object
+            return targetCard[command.handler](...(command.args || []));
+        } else {
+            MSG.log(`Invalid command: ${command}\nTarget Card: ${targetCard}`,1)
+        }
+    }
+
+    /**
+    * Gathers all available commands and then shares them with every card.
+    */
+    broadcastAvailableCommands() {
+        const allAvailableCommands = [];
+        for (const card of this.allCards.values()) {
+            // Use the `commands` property from the RSSCard interface
+            if (card.commands && card.commands.length > 0) {
+                allAvailableCommands.push(...card.commands);
+            }
+        }
+
+        // Now, directly tell each card to refresh its list.
+        for (const card of this.allCards.values()) {
+            if (typeof card.refreshAvailableCommands === 'function') {
+                card.refreshAvailableCommands(allAvailableCommands);
+            }
+        }
+    }
+
+
+    // #endregion
+
+    // #endregion Drag&Drop Handlers
+
+    // #region Global Functionality Methods - e.g., adding/removing cards, downloading/uploading config, etc.
+    // ==============================================================================================================
 
 
     // we should create a way for boards saved from previous versions of the app can still upload
@@ -502,7 +569,14 @@ export class SoundboardManager {
         const reader = new FileReader();
         reader.onload = async (e) => {
             try {
-                const data = JSON.parse(e.target.result);
+                //@ts-ignore
+                let data = JSON.parse(e.target.result);
+
+                // migration logic for legacy users
+                if (data.length > 0 && typeof data[0].id === 'number') {
+                    console.log("Old configuration file detected. Migrating to new format...");
+                    data = this.migrateAndSeparateConfig(data);
+                }
                 const confirmed = await this.showConfirmModal("This will overwrite your current soundboard configuration. Are you sure?");
                 if (confirmed) {
                     const deserializedData = data.map(item => {
@@ -530,21 +604,51 @@ export class SoundboardManager {
         reader.readAsText(file);
     }
 
+    //#endregion
 
+    // #region Modal Manager Methods
 
-    // ================================================================
-    // Modal Manager Methods
-    // ================================================================
+    // This should probably stay here in SoundboardManager because it's a generic UI component.
+    showConfirmModal(message) {
+        return new Promise(resolve => {
+            const modal = document.getElementById('confirm-modal');
+            const messageEl = document.getElementById('confirm-modal-message');
+            const yesBtn = document.getElementById('confirm-yes-btn');
+            const noBtn = document.getElementById('confirm-no-btn');
+            messageEl.textContent = message;
+            const handler = (e) => {
+                if (e.target === yesBtn) resolve(true);
+                else if (e.target === noBtn) resolve(false);
+                yesBtn.removeEventListener('click', handler);
+                noBtn.removeEventListener('click', handler);
+                modal.style.display = 'none';
+            };
+            yesBtn.addEventListener('click', handler);
+            noBtn.addEventListener('click', handler);
+            modal.style.display = 'flex';
+            modal.style.zIndex = '1001';
+        });
+    }
 
-    // if we end up making each class own its modals, this should go with SoundBoardDB?
+    // Considering moving this to SoundboardDB since it's related to the DB
     async showDbManagerModal() {
         this.updateDbStats();
         this.updateDbFileList();
 
+        /**@ts-ignore @type {HTMLInputElement} */
         const checkbox = document.getElementById('persistent-storage-checkbox');
-        // The persistent storage option may never work, and might not need to exist.
+        const clearDbBtn = document.getElementById('clear-database-btn');
+        const boardId = this.db.boardId;
+
+        if (boardId === 'default') {
+            clearDbBtn.textContent = 'Reset Default Board...';
+        } else {
+            clearDbBtn.textContent = `Delete '${boardId}' Board...`;
+        }
+
+        // The persistent storage option may never work, and might not need to exist?
         if (navigator.storage && navigator.storage.persisted) {
-            checkbox.parentElement.style.display = ''; // Ensure it's visible
+            checkbox.parentElement.style.display = '';
             const isPersisted = await navigator.storage.persisted();
             checkbox.checked = isPersisted;
             checkbox.disabled = isPersisted;
@@ -636,33 +740,136 @@ export class SoundboardManager {
         }
     }
 
-    // This should probably stay here in SoundboardManager because it's a generic UI component.
-    showConfirmModal(message) {
-        return new Promise(resolve => {
-            const modal = document.getElementById('confirm-modal');
-            const messageEl = document.getElementById('confirm-modal-message');
-            const yesBtn = document.getElementById('confirm-yes-btn');
-            const noBtn = document.getElementById('confirm-no-btn');
-            messageEl.textContent = message;
-            const handler = (e) => {
-                if (e.target === yesBtn) resolve(true);
-                else if (e.target === noBtn) resolve(false);
-                yesBtn.removeEventListener('click', handler);
-                noBtn.removeEventListener('click', handler);
-                modal.style.display = 'none';
-            };
-            yesBtn.addEventListener('click', handler);
-            noBtn.addEventListener('click', handler);
-            modal.style.display = 'flex';
-            modal.style.zIndex = 1001;
-        });
+    // #endregion
+
+    // #region Compatibility Helpers ===================================================================================
+
+    handleCardMigration(task) {
+        this.migrationQueue.push(task);
+        // If the processor isn't already running, kick it off.
+        if (!this.isMigrating) {
+            this.isMigrating = true;
+            console.log("Starting background data migration for audio durations...");
+            this._processMigrationQueue();
+        }
+    }
+
+    async _processMigrationQueue() { // currently this is only for the duration in the soundcards but will expand as needed
+        if (this.migrationQueue.length === 0) {
+            this.isMigrating = false;
+            console.log("Audio duration migration complete.");
+            this.broadcastAvailableCommands(); // Broadcast updated commands once done
+            return;
+        }
+
+        const task = this.migrationQueue.shift();
+        try {
+            const durationInSeconds = await getAudioDuration(task.file.arrayBuffer);
+            const durationInMs = durationInSeconds * 1000;
+
+            // Update the data on the card instance
+            task.card.data.files[task.fileIndex].durationMs = durationInMs;
+
+            // Save the entire updated card data back to the database
+            await task.card.db.save(task.card.id, task.card.data);
+        } catch (e) {
+            console.error(`Failed to migrate duration for file in card ${task.card.id}:`, e);
+        }
+
+        // Process the next item on a brief timeout to keep the UI responsive
+        setTimeout(() => this._processMigrationQueue(), 100);
     }
 
 
+    /**
+     * Detects an old configuration format and migrates it to the new structure.
+     * It separates cards from config items and updates their data models.
+     * @param {Array<Object>} oldData - The raw data array from the old JSON file.
+     * @returns {Array<Object>} A new array with data in the modern format.
+     */
+    migrateAndSeparateConfig(oldData) {
+        const migratedData = [];
+        const idMap = new Map(); // To track old numeric IDs and their new prefixed string IDs
+
+        // First pass: Process all cards and create an ID map
+        oldData.forEach(item => {
+            let newItem = { ...item }; // Start with a copy
+
+            // --- Migrate Sound Cards ---
+            if (typeof item.id === 'number' && item.files) {
+                const newId = `sound-${item.id}`;
+                // Use a composite key to avoid collisions: "sound-0"
+                idMap.set(`sound-${item.id}`, newId);
+                newItem = {
+                    ...SoundCard.Default(),
+                    ...item,
+                    id: newId,
+                    title: item.name,
+                    type: 'sound'
+                };
+                delete newItem.name;
+            }
+            // --- Migrate Timer Cards ---
+            else if (item.id.startsWith && item.id.startsWith('timer-')) {
+                const oldIdNumeric = item.id.split('-')[1];
+                // Use a composite key: "timer-0"
+                idMap.set(`timer-${oldIdNumeric}`, item.id);
+                newItem = {
+                    ...TimerCard.Default(),
+                    ...item,
+                    type: 'timer',
+                    startAction: { command: item.startSound || "", durationMs: 0, triggered: false },
+                    endAction: { command: item.endSound || "", durationMs: item.endSoundDuration || 0, triggered: false }
+                };
+                // Clean up old properties
+                delete newItem.startSoundId; delete newItem.endSoundId; delete newItem.endSoundDuration;
+                delete newItem.startSound; delete newItem.endSound;
+            }
+            // --- Migrate Notepad Cards ---
+            else if (item.id.startsWith && item.id.startsWith('notepad-')) {
+                const oldIdNumeric = item.id.split('-')[1];
+                // Use a composite key: "notepad-0"
+                idMap.set(`notepad-${oldIdNumeric}`, item.id);
+                newItem = { ...NotepadCard.Default(), ...item, type: 'notepad' };
+            }
+
+            migratedData.push(newItem);
+        });
+
+        // Second pass: Update the grid-layout with the new IDs
+        const gridLayoutItem = migratedData.find(item => item.id === 'grid-layout');
+        if (gridLayoutItem) {
+            gridLayoutItem.layout = gridLayoutItem.layout.map(layoutItem => {
+                // Look up using the same composite key structure
+                const newId = idMap.get(`${layoutItem.type}-${layoutItem.id}`);
+                if (newId) {
+                    return { ...layoutItem, id: newId };
+                }
+                return layoutItem; // Keep items like 'control-card' as is
+            });
+        }
+
+        // Filter out any non-card config items that were processed in the first pass
+        return migratedData.filter(item => item.type || item.id === 'grid-layout' || item.id === 'soundboard-title');
+    }
+
+
+    // #endregion
+
+
+    /*
+       /\    
+      /  \   
+     /    \  
+    /------\ 
+    |      |  BUG'S HOUSE
+    |______| 
+    */
 
     // Metaphorically speaking, the Helper Bug IS the SoundboardManager. She lives here <3
 
     async initBugMovement() {
+        /**@ts-ignore @type {HTMLInputElement} */
         const checkbox = document.getElementById('toggle-bug-movement-checkbox');
         const bug = document.getElementById('help-bug-btn');
 

@@ -331,6 +331,52 @@ input[type="range"]::-moz-range-thumb {
 /* =================================================================== */
 /* CONTROL CARD
 /* =================================================================== */
+#control-card {
+    perspective: 1000px;
+    height: 100%;
+}
+
+.control-card-inner {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    transition: transform 0.6s;
+    transform-style: preserve-3d;
+}
+
+/* The .is-flipped class will be toggled by JS to trigger the animation */
+#control-card.is-flipped .control-card-inner {
+    transform: rotateY(180deg);
+}
+
+.control-card-face {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    -webkit-backface-visibility: hidden; /* Safari */
+    backface-visibility: hidden;
+
+    /* Re-apply grid layout to each face */
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    box-sizing: border-box;
+}
+
+/* Style the back face so it's correctly oriented when flipped */
+#control-card-back {
+    transform: rotateY(180deg);
+}
+
+/* Ensure buttons on each face fill the grid correctly */
+#control-card-front button, #control-card-back button {
+    grid-column: span 1; /* Default */
+}
+#control-card-front .span-two-columns, #control-card-back .span-two-columns {
+    grid-column: span 2;
+}
+
 #control-card-actions {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -474,8 +520,8 @@ timer-display span {
     width: 100%;
 }
 
-.timer-end-sound,
-.timer-start-sound {
+.timer-end-action,
+.timer-start-action {
     font-size: 1rem;
     width: 60%;
     margin-left: auto;

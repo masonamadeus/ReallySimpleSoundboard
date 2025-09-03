@@ -1,0 +1,8 @@
+========== WISHLIST AND IDEAS ==================
+
+SOUNDBOARD OVERALL ================
+- Cache active google font for true offlineness
+
+NOTEPAD CARDS =====================
+- Spell check
+- hyperlink support

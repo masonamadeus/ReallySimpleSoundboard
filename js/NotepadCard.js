@@ -2,15 +2,18 @@ import { RSSCard } from "./RSSCard.js";
 
 export class NotepadCard extends RSSCard {
 
-    static getInitialData(newId) {
+    static Default() {
         return {
-            id: newId,
             type: 'notepad',
             pages: [{ title: 'New Note', content: '' }],
             currentPageIndex: 0,
             height: '200px' // A sensible default height
         };
                         
+    }
+
+    get title() {
+        return  this.data.pages[this.data.currentPageIndex].title
     }
 
     constructor(cardData, soundboardManager, dbInstance) {
@@ -24,15 +27,19 @@ export class NotepadCard extends RSSCard {
         //@ts-ignore
         this.addPageButton = this.cardElement.querySelector('.add-page-btn');
 
-        this.attachListeners();
-        this.updateUI();
+        this._initialize();
     }
 
     get templateId() {
         return 'notepad-card-template';
     }
 
-    attachListeners() {
+    _initialize(){
+        this._attachListeners();
+        this.updateUI();
+    }
+
+    _attachListeners() {
 
         this.contentElement.addEventListener('input', () => {
             this.data.pages[this.data.currentPageIndex].content = this.contentElement.value;

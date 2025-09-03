@@ -5,7 +5,6 @@
 export class SoundboardDB {
     constructor(boardIdOverride = null) {
         
-        
         this.CARD_PREFIXES = ['sound-', 'notepad-', 'timer-'];
 
 
@@ -17,6 +16,8 @@ export class SoundboardDB {
             const urlParams = new URLSearchParams(window.location.search);
             boardId = urlParams.get('board') || 'default';
         }
+
+        this.boardId = boardId;
 
         this.DB_NAME = `BugAndMossSoundboardDB_${boardId}`;
         this.DB_VERSION = 10;
@@ -48,6 +49,8 @@ export class SoundboardDB {
                 }
 
                 const transaction = event.target.transaction;
+
+
                 // --- REFACTOR: Use the defined property for the legacy store name ---
                 if (this.db.objectStoreNames.contains(this.LEGACY_SOUNDS_STORE)) {
                     const oldSoundsStore = transaction.objectStore(this.LEGACY_SOUNDS_STORE);
@@ -101,6 +104,12 @@ export class SoundboardDB {
         });
     }
 
+    /* 
+        I think I want to make this smarter.
+        Rather than define a list of cards here, why not just create a store based on the CLASS of what is calling save?
+        Surely we could get the name of the class from just the data object. Or use the 'type' field
+    */
+
    // Save a piece of data to the appropriate store
     async save(id, data) {
         const isCardId = this.CARD_PREFIXES.some(prefix => id.startsWith(prefix));
@@ -129,5 +138,33 @@ export class SoundboardDB {
         const isCardId = this.CARD_PREFIXES.some(prefix => id.startsWith(prefix));
         const storeName = isCardId ? this.CARDS_STORE : this.CONFIG_STORE;
         return this._dbRequest(storeName, 'readwrite', 'delete', id);
+    }
+
+    async clear() {
+        return new Promise((resolve, reject) => {
+            if (!this.db) {
+                return reject("Database is not open.");
+            }
+            // Open a transaction that includes all stores you want to clear
+            const transaction = this.db.transaction([this.CARDS_STORE, this.CONFIG_STORE], 'readwrite');
+            
+            transaction.oncomplete = () => {
+                resolve();
+            };
+            
+            transaction.onerror = () => {
+                reject(transaction.error);
+            };
+
+            // Clear each store within the same transaction
+            transaction.objectStore(this.CARDS_STORE).clear();
+            transaction.objectStore(this.CONFIG_STORE).clear();
+        });
+    }
+
+    
+
+    async getNewId(type){
+        return `${type}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
     }
 }

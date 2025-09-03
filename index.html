@@ -44,7 +44,6 @@
             </div>
         </div>
     </div>
-
     <!-- NOTEPAD CARD TEMPLATE -->
 
     <template id="notepad-card-template">
@@ -125,25 +124,27 @@
     </template>
 
     <!-- CONTROL CARD -->
-    <div id="control-card" class="sound-card special-function-card" data-card-type="control" data-card-id="control-card"
-        style="display: none;">
-        <div id="control-card-actions">
+    <div id="control-card" class="sound-card special-function-card" data-card-type="control" data-card-id="control-card" style="display: none;">
+    <div class="control-card-inner">
+        <div id="control-card-front" class="control-card-face">
             <button id="add-sound-btn" class="span-two-columns">Add Sound</button>
             <button id="add-timer-btn">Add Timer</button>
             <button id="add-notepad-btn">Add Note</button>
             <button id="rearrange-mode-btn" class="span-two-columns">Rearrange</button>
+            <button id="flip-to-settings-btn" class="secondary-color span-two-columns">Settings</button>
+        </div>
+
+        <div id="control-card-back" class="control-card-face">
             <button id="upload-config-btn">Upload</button>
             <button id="download-config-btn">Download</button>
-            <button id="switch-board-btn" class="span-two-columns">Switch
-                Board</button>
+            <button id="switch-board-btn" class ="accent-color span-two-columns">Switch Board</button>
             <button id="cosmetics-btn">Cosmetics</button>
             <button id="db-manager-btn">Storage</button>
-
-
+            <button id="flip-to-main-btn"class="span-two-columns secondary-color">Back</button>
         </div>
-         <!-- CONFIGURATION FILE UPLOAD FORM -->
-        <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
     </div>
+    <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
+</div>
    
    <template id="sound-card-template">
     <div class="sound-card">
@@ -173,16 +174,16 @@
                 <div class="modal-section">
                     <h3>Button Settings</h3>
                     <div class="title-and-color">
-                        <input type="color" class="button-color-picker">
-                        <input type="text" style="font-size: 1rem;" class="button-name-input">
+                        <input type="color" class="button-color-picker" data-key="color">
+                        <input type="text" style="font-size: 1rem;" data-key="title" class="button-name-input">
                     </div>
                 </div>
                 <div class="modal-section">
                     <div class="modal-checkbox-group">
-                        <label><input type="checkbox" class="shuffle-checkbox"> Random</label>
-                        <label><input type="checkbox" class="autoplay-checkbox"> Autoplay</label>
-                        <label><input type="checkbox" class="priority-checkbox"> Priority</label>
-                        <label><input type="checkbox" class="loop-checkbox"> Loop</label>
+                        <label><input type="checkbox" class="shuffle-checkbox" data-key="shuffle"> Random</label>
+                        <label><input type="checkbox" class="autoplay-checkbox" data-key="autoplay"> Autoplay</label>
+                        <label><input type="checkbox" class="priority-checkbox" data-key="priority"> Priority</label>
+                        <label><input type="checkbox" class="loop-checkbox" data-key="loop"> Loop</label>
                     </div>
                 </div>
                 <div class="modal-section">

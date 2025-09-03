@@ -1,5 +1,5 @@
 import { MSG } from './MSG.js';
-export class RSSCard {
+export class NEWCARD extends RSSCard {
     /**
      * The constructor for all card types.
      * @param {object} cardData The initial data for the card from the database.
@@ -7,20 +7,7 @@ export class RSSCard {
      * @param {import('./SoundboardDB.js').SoundboardDB} dbInstance A reference to the database.
      */
     constructor(cardData, soundboardManagerAPI, dbInstance) {
-
-        this.data = cardData;
-        this.manager = soundboardManagerAPI;
-        this.db = dbInstance;
-        this.id = this.data.id;
-        this.cardElement = this._createElement();
-        this.commands = []; // THIS card's commands
-        this.allCommands = []; // Everyone ELSE'S commands.
-
-        // 1. initialize commands
-        this._registerCommands();
-
-        // 2. A placeholder callback for subclasses to use when allCommands is updated
-        this.onCommandsRefreshed = (allCommands) => {};
+        super(cardData, soundboardManagerAPI, dbInstance)
 
 
     }
@@ -28,19 +15,20 @@ export class RSSCard {
 // ======================= OVERRIDE ALL THESE BITCHES OR ELSE =================================
 
     /**
-     * A getter that child classes MUST override to provide their template ID.
      * @returns {string} The template ID for the card (e.g., 'timer-card-template').
      */
     get templateId() {
-        throw new Error('Child class must implement templateId getter.');
     }
 
     /**
-     * A static method that child classes MUST implement to provide default data.
      * @returns {object} The default data object for the card type.
      */
     Default() {
-        throw new Error('Child class must implement static Default method.');
+        return {
+            type: 'newcard',
+            title: 'New Card'
+            // DEFAULT CARD DATA GOES HERE
+        }
     }
 
     /**
@@ -124,7 +112,7 @@ export class RSSCard {
 
     createCommandTicket(durationMs = 0, args = {}) {
         if (typeof durationMs !== 'number' || typeof args !== 'object' || args === null) {
-            console.error('Invalid CommandTicket format. durationMs must be a number and args must be an object.',1);
+            console.error('Invalid CommandTicket format. durationMs must be a number and args must be an object.');
             return { durationMs: 0, args: {} };
         }
         return { durationMs, args };
@@ -166,54 +154,4 @@ export class RSSCard {
         return command;
     }
 
-    // ========================================================================================================
-    // PURELY INTERNAL METHODS
-    // ========================================================================================================
-
-    static async create(CardClass, managerAPI, db) {
-        const type = CardClass.Default().type; // Get type from the default data
-        if (!type) throw new Error("Card's Default() method must include a 'type' property.");
-
-        const newId = await db.getNewId(type);
-        const defaultData = CardClass.Default();
-        const newCardData = {
-            ...defaultData,
-            id: newId,
-        };
-        return new CardClass(newCardData, managerAPI, db);
-    }
-    
-    refreshAvailableCommands(allCommands) {
-        this.allCommands = allCommands;
-        // This calls the function provided by the subclass (e.g., populateCommandSelectors).
-        this.onCommandsRefreshed(this.allCommands);
-    }
-
-   /**
-     * Creates the card's main HTML element from a template.
-     * @returns {HTMLElement}
-     */
-    _createElement() {
-        const template = document.getElementById(this.templateId);
-        if (!template) {
-            throw new Error(`Template not found: ${this.templateId}`);
-        }
-        //@ts-ignore
-        const cardElement = template.content.firstElementChild.cloneNode(true);
-
-        cardElement.dataset.cardId = this.data.id;
-        cardElement.dataset.cardType = this.data.type;
-        cardElement.setAttribute('draggable', this.manager.isRearranging);
-
-        return cardElement;
-    } 
-
-    // Helper method to handle card deletion
-    async _handleDeleteCard() {
-        const confirmed = await this.manager.showConfirmModal("Are you sure you want to permanently remove this button?");
-        if (confirmed) {
-            this.destroy();
-            this.manager.removeCard(this.data.id);
-        }
-    }
 }
