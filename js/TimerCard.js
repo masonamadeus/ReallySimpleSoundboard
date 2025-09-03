@@ -126,9 +126,6 @@ export class TimerCard extends Card {
     }
 
     _initialize(){
-        this.onCommandsRefreshed = (commands) => {
-            this.populateCommandSelectors(commands);
-        };
         this._registerCommands();
         this._attachListeners();
         this.updateUI();
@@ -136,7 +133,7 @@ export class TimerCard extends Card {
 
     _registerCommands() {
         this.registerCommand({
-            name: "Play/Pause",
+            name: "Start/Pause",
             preload: null,
             execute: this.handlePlayPause
         });
@@ -147,7 +144,6 @@ export class TimerCard extends Card {
             execute: this.reset
         })
     }
-
 
     _attachListeners() {
         this.startPauseBtn.addEventListener('click', () => this.handlePlayPause());
@@ -194,6 +190,10 @@ export class TimerCard extends Card {
     // ================================================================
     // Event Handlers
     // ================================================================
+
+    onCommandsChanged(allCommands){
+        this.populateCommandSelectors(allCommands);
+    }
 
     populateCommandSelectors(availableCommands) {
         const startActionSelect = this.timerStartActionSelect;

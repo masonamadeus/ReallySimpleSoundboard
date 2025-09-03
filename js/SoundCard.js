@@ -103,7 +103,7 @@ export class SoundCard extends Card {
         this.data.files.forEach((file, index) => {
             // If a file from the DB is missing the duration, it needs migrating.
             if (file.durationMs === undefined) {
-                MSG.say(MSG.is.CARD_MIGRATION_NEEDED, {
+                this.manager.handleCardMigration( {
                     card: this,
                     file: file,
                     fileIndex: index
@@ -224,7 +224,6 @@ export class SoundCard extends Card {
 
     destroy() {
         this.player.cleanup();
-        MSG.off(MSG.is.SOUNDCARD_GET_DURATION, this.boundNextDurationInfoHandler);
         MSG.off(MSG.is.SOUNDCARD_PRIORITY_STARTED, this.boundPriorityPlayHandler);
         MSG.off(MSG.is.SOUNDCARD_PRIORITY_ENDED, this.boundPriorityStopHandler);
         super.destroy();
@@ -541,12 +540,7 @@ export class SoundCard extends Card {
 
         if (dataKey) {
             const value = target.type === 'checkbox' ? target.checked : target.value;
-            this.updateData({ [dataKey]: value }).then(() => {
-                this.updateUI();
-                if (dataKey === 'title') {
-                    MSG.say(MSG.is.CARD_COMMANDS_CHANGED);
-                }
-            });
+            this.updateData({ [dataKey]: value });
         }
     };
 

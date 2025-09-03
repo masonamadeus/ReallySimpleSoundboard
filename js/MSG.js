@@ -1,17 +1,11 @@
 export class EventManager {
     constructor() {
         this.is = {
-            // Card-specific actions
-            CARD_TRIGGER_ACTION: 'Card:TriggerAction',
-            CARD_COMMANDS_CHANGED: 'Card:CommandsChanged',
-            CARD_MIGRATION_NEEDED: 'Card:MigrationNeeded',
-
             // Soundboard-level actions
             SOUNDBOARD_REFRESH_CARDS: 'Soundboard:RefreshCards',
             SOUNDBOARD_DELETED_CARD: 'Soundboard:DeletedCard',
 
-            // SoundCard-specific requests
-            SOUNDCARD_GET_DURATION: 'SoundCard:GetDurationInfo',
+            // Soundcard-level actions
             SOUNDCARD_PRIORITY_STARTED: 'SoundCard:PriorityStarted',
             SOUNDCARD_PRIORITY_ENDED: 'SoundCard:PriorityEnded',
         };

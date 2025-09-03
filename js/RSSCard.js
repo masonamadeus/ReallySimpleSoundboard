@@ -40,14 +40,12 @@ export class Card {
         this.db = dbInstance;
         this.id = this.data.id;
         this.cardElement = this._createElement();
+
         this.commands = []; // THIS card's commands
         this.allCommands = []; // Everyone ELSE'S commands.
 
         // 1. initialize commands
-        this._registerCommands();
-
-        // 2. A placeholder callback for subclasses to use when allCommands is updated
-        this.onCommandsRefreshed = (allCommands) => {};
+        this._rebuildCommands();
 
 
     }
@@ -71,9 +69,18 @@ export class Card {
     }
 
     /**
-     * Placeholder for initializing commands. Child classes MUST implement this.
+     * Placeholder for initializing commands. Child classes MUST implement this if they provide commands.
      */
     _registerCommands() {
+    }
+
+     /**
+     * This method is called by the SoundboardManager whenever the global
+     * command list is updated.
+     * @param {Array<object>} allCommands The fresh list of all available commands.
+     */
+    onCommandsChanged(allCommands) {
+        // Child classes can implement this
     }
 
     /**
@@ -97,19 +104,13 @@ export class Card {
     destroy() {
     }
 
-// ============= CHILD CLASSES SHOULD USE THESE FUNCTIONS, BUT PLEASE DON'T OVERRIDE UNLESS YOU CRAZY =================
+// ============= COMMAND USE LOGIC =================
 
-    /**
-    * Updates the card's data object and saves it to the database. Don't override without good reason.
-    */
-    async updateData(newData) {
-        if (Object.keys(newData).length === 0) {
-            return;
-        }
-        this.data = { ...this.data, ...newData };
-        await this.db.save(this.data.id, this.data);
+    _rebuildCommands() {
+        this.commands = [];
+        this._registerCommands();
+        this.manager.registerCardCommands(this.id, this.commands);
     }
-    
 
     registerCommand({ name, preload, execute }) {
         const command = {
@@ -186,7 +187,7 @@ export class Card {
     }
 
     // ========================================================================================================
-    // PURELY INTERNAL METHODS
+    // DADDY LEVEL METHODS
     // ========================================================================================================
 
     static async create(CardClass, managerAPI, db) {
@@ -201,11 +202,25 @@ export class Card {
         };
         return new CardClass(newCardData, managerAPI, db);
     }
+
+    async updateData(newData) {
+        if (Object.keys(newData).length === 0) {
+            return;
+        }
+
+        const oldTitle = this.data.title;
+        this.data = { ...this.data, ...newData };
+        await this.db.save(this.data.id, this.data);
+
+        if (this.data.title !== oldTitle){
+            this._rebuildCommands();
+        }
+    }
     
     refreshAvailableCommands(allCommands) {
         this.allCommands = allCommands;
         // This calls the function provided by the subclass (e.g., populateCommandSelectors).
-        this.onCommandsRefreshed(this.allCommands);
+        this.onCommandsChanged(this.allCommands);
     }
 
    /**

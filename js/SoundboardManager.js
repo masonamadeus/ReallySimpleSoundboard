@@ -7,7 +7,8 @@ import { BoardManager } from './BoardManager.js';
 import { ThemeManager } from './ThemeManager.js';
 import {
     getAudioDuration, arrayBufferToBase64, base64ToArrayBuffer,
-    loadGoogleFonts, slugify, formatIdAsTitle, formatBytes
+    loadGoogleFonts, slugify, formatIdAsTitle, formatBytes,
+    debounce
 } from './helper-functions.js';
 import { MSG } from './MSG.js';
 
@@ -34,13 +35,15 @@ export class SoundboardManager {
         this.migrationQueue = [];
         this.isMigrating = false;
 
-        this.cardCommands = new Map();
+        this.allCardCommands = new Map();
 
         this.managerAPI = {
             getCardById: this.getCardById.bind(this),
             showConfirmModal: this.showConfirmModal.bind(this),
             removeCard: this.removeCard.bind(this),
+            registerCardCommands: this.registerCardCommands.bind(this),
             handleCardCommand: this.handleCardCommand.bind(this),
+            handleCardMigration: this.handleCardMigration.bind(this),
             getIsRearranging: () => this.isRearranging // Use a getter for properties
         };
 
@@ -64,6 +67,7 @@ export class SoundboardManager {
         await this.themeManager.init();
         await this.initBugMovement();
         await this.loadCardsAndLayout();
+        await this.broadcastAllCommands();
     }
 
 
@@ -128,8 +132,6 @@ export class SoundboardManager {
                 this.soundboardGrid.appendChild(cardElement);
             }
         });
-
-        this.broadcastAvailableCommands(); // Notify all cards of the current commands
     }
 
     toggleRearrangeMode() {
@@ -217,13 +219,6 @@ export class SoundboardManager {
     // ================================================================
 
     attachGlobalEventListeners() {
-
-        // CARD ACTION ROUTER
-        MSG.on(MSG.is.CARD_COMMANDS_CHANGED, this.broadcastAvailableCommands.bind(this));
-        MSG.on(MSG.is.CARD_MIGRATION_NEEDED,(task) => this.handleCardMigration(task))
-        
-
-
 
         // SOUNDBOARD TITLE
         document.getElementById('soundboard-title').addEventListener('blur', (e) => {
@@ -484,6 +479,9 @@ export class SoundboardManager {
         // 2. Remove the card from the DOM.
         cardInstance.cardElement.remove();
 
+        // 2.5 unregister card commands
+        this.unregisterCardCommands(cardInstance.id)
+
         // 3. Remove the card from our in-memory state.
         this.allCards.delete(cardIdToRemove);
 
@@ -512,30 +510,43 @@ export class SoundboardManager {
         }
     }
 
-    updateCardCommands(cardId, commands){
-        const card = this.allCards.get(cardId);
-        
+    /**
+     * Called by cards to register or update their commands in the central registry.
+     * @param {string} cardId The ID of the card registering its commands.
+     * @param {object[]} commands An array of the card's command objects.
+     */
+    registerCardCommands(cardId, commands) {
+        this.allCardCommands.set(cardId, commands);
+        this.broadcastAllCommands();
     }
 
     /**
-    * Gathers all available commands and then shares them with every card.
-    */
-    broadcastAvailableCommands() {
-        const allAvailableCommands = [];
-        for (const card of this.allCards.values()) {
-            // Use the `commands` property from the RSSCard interface
-            if (card.commands && card.commands.length > 0) {
-                allAvailableCommands.push(...card.commands);
-            }
+     * Called when a card is removed to clean up the registry.
+     * @param {string} cardId The ID of the card to unregister.
+     */
+    unregisterCardCommands(cardId) {
+        this.allCardCommands.delete(cardId);
+        this.broadcastAllCommands();
+    }
+
+    /**
+     * Notifies all cards that the list of available commands has changed.
+     * This is debounced to prevent event storms during rapid updates.
+     */
+    broadcastAllCommands = debounce(() => {
+        const commandList = [];
+        // Flatten the map's values into a single array for subscribers
+        for (const commands of this.allCardCommands.values()) {
+            commandList.push(...commands);
         }
 
-        // Now, directly tell each card to refresh its list.
+        // Notify each card
         for (const card of this.allCards.values()) {
-            if (typeof card.refreshAvailableCommands === 'function') {
-                card.refreshAvailableCommands(allAvailableCommands);
+            if (typeof card.onCommandsChanged === 'function') {
+                card.onCommandsChanged(commandList);
             }
         }
-    }
+    }, 600); // Debounce by 600ms
 
 
     // #endregion
@@ -765,7 +776,7 @@ export class SoundboardManager {
         if (this.migrationQueue.length === 0) {
             this.isMigrating = false;
             console.log("Audio duration migration complete.");
-            this.broadcastAvailableCommands(); // Broadcast updated commands once done
+            this.broadcastAllCommands(); // Broadcast updated commands once done
             return;
         }
 
