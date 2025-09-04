@@ -74,17 +74,7 @@ export class AudioPlayer {
         this._resetUI();
     }
 
-    /**
-     * Completely destroys the player, removing all event listeners to prevent memory leaks.
-     */
-    destroy() {
-        this.stop();
-        // Nullify listeners to break circular references and prevent memory leaks
-        this.audio.onplaying = null;
-        this.audio.onpause = null;
-        this.audio.onended = null;
-        this.owner = null; // Break the reference to the owner
-    }
+    
 
     // --- Private Methods ---
 
@@ -109,10 +99,12 @@ export class AudioPlayer {
         };
 
         this.audio.onpause = () => { // Covers both manual stops and natural ends
-            this.isPlaying = false;
-            this._stopMonitoring();
-            this._resetUI();
-            this._fireCallback('onStop');
+            if (this.isPlaying) {
+                this.isPlaying = false;
+                this._stopMonitoring();
+                this._resetUI();
+                this._fireCallback('onStop');
+            }
         };
 
         this.audio.onended = () => {
@@ -170,5 +162,16 @@ export class AudioPlayer {
     _resetUI() {
         if (this.elements.progressOverlay) this.elements.progressOverlay.style.width = '0%';
         if (this.elements.cardElement) this.elements.cardElement.classList.remove('hover-glow');
+    }
+
+    /**
+     * Completely destroys the player, removing all event listeners to prevent memory leaks.
+     */
+    destroy() {
+        this.stop();
+        // Nullify listeners to break circular references and prevent memory leaks
+        this.audio.onplaying = null;
+        this.audio.onpause = null;
+        this.audio.onended = null;
     }
 }

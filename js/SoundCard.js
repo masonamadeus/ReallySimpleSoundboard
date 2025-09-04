@@ -28,7 +28,7 @@ export class SoundCard extends Card {
             files: [],
             duckFactor: 0.4, // how much to duck under priority
             duckSpeed: 350, // how long to lerp in ms
-            duckOffsetMs: 150,
+            duckOffsetMs: 40,
             unduckOffsetMs: 350 // overlap the ducking window on start/end 
         };
     }
