@@ -162,9 +162,5 @@ export class SoundboardDB {
         });
     }
 
-    
 
-    async getNewId(type){
-        return `${type}-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-    }
 }

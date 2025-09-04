@@ -1,5 +1,5 @@
 import { MSG } from './MSG.js';
-class PreloadTicket {
+class Ticket {
     /**
      * @param {object} options
      * @param {number} [options.durationMs=0] - The duration of the command in milliseconds.
@@ -25,10 +25,11 @@ class PreloadTicket {
     }
 }
 
+// what if we changed how we handle 'type' entirely, by making indexedDB create a store based on the class name of whatever card
 export class Card {
 
     // Make the PreloadTicket class available to child cards because imports are annoying asf
-    static PreloadTicket = PreloadTicket;
+    static Ticket = Ticket;
     
     /**
      * The constructor for all card types.
@@ -37,8 +38,10 @@ export class Card {
      * @param {import('./SoundboardDB.js').SoundboardDB} dbInstance A reference to the database.
      */
     constructor(cardData, soundboardManagerAPI, dbInstance) {
+        //@ts-ignore yes it does exist
+        const defaultData = this.constructor.Default();
+        this.data = { ...defaultData, ...cardData };
 
-        this.data = cardData;
         this.manager = soundboardManagerAPI;
         this.db = dbInstance;
         this.id = this.data.id;
@@ -137,19 +140,19 @@ export class Card {
 
         // if we're missing a preload command or it's not a function
         if (!command || typeof command.preload !== 'function') {
-            return new PreloadTicket(); // Return a default, safe ticket
+            return new Ticket(); // Return a default, safe ticket
         }
 
         // get our ticket and validate it
         const ticket = command.preload(options);
-        if (ticket instanceof PreloadTicket){
+        if (ticket instanceof Ticket){
             MSG.log(`Preloaded Command: ${command.id}, returning ticket.`,1,ticket)
             // if it's a valid ticket, return it
             return ticket;
         }
 
         MSG.log(`Command '${commandId}' returned an invalid ticket.`,1,ticket)
-        return new PreloadTicket
+        return new Ticket
 
     }
 
@@ -193,11 +196,11 @@ export class Card {
     // DADDY LEVEL METHODS
     // ========================================================================================================
 
-    static async create(CardClass, managerAPI, db) {
+    static create(CardClass, managerAPI, db) {
         const type = CardClass.Default().type; // Get type from the default data
         if (!type) throw new Error("Card's Default() method must include a 'type' property.");
 
-        const newId = await db.getNewId(type);
+        const newId = `${type}-${crypto.randomUUID()}`
         const defaultData = CardClass.Default();
         const newCardData = {
             ...defaultData,

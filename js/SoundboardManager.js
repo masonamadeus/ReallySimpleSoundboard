@@ -1,7 +1,5 @@
 import { AudioPlayer } from './AudioPlayer.js';
-import { TimerCard } from './TimerCard.js';
-import { NotepadCard } from './NotepadCard.js';
-import { SoundCard } from './SoundCard.js';
+import { Card } from './-Card.js';
 import { SoundboardDB } from './SoundboardDB.js';
 import { BoardManager } from './BoardManager.js';
 import { ThemeManager } from './ThemeManager.js';
@@ -11,6 +9,11 @@ import {
     debounce
 } from './helper-functions.js';
 import { MSG } from './MSG.js';
+
+// we will get rid of the following once we implement CardRegistry.js
+import { SoundCard } from './SoundCard.js';
+import { NotepadCard } from './NotepadCard.js';
+import { TimerCard } from './TimerCard.js';
 
 // ====================================================================
 // SECTION: Application Manager Class
@@ -24,18 +27,22 @@ export class SoundboardManager {
         this.controlCardElement = document.getElementById('control-card');
 
         this.allCards = new Map(); // Stores all card instances, keyed by their unique ID.
-        this.gridLayout = [];
+        this.allCardCommands = new Map(); // Stores all card commands, keyed by the card ID
+
+        this.gridLayout = { id: 'root', type: 'grid-container', children: [] };
         this.GRID_LAYOUT_KEY = 'grid-layout';
         this.isRearranging = false;
         this.draggedItem = null;
-        this.themeManager = new ThemeManager(this.db, new SoundboardDB('default'), this);
+        this.draggedItemData = null;
+        this.dropIndicator = null;
 
+
+        this.themeManager = new ThemeManager(this.db, new SoundboardDB('default'), this);
         this.boardManager = new BoardManager();
 
         this.migrationQueue = [];
         this.isMigrating = false;
 
-        this.allCardCommands = new Map();
 
         this.managerAPI = {
             getCardById: this.getCardById.bind(this),
@@ -47,91 +54,44 @@ export class SoundboardManager {
             getIsRearranging: () => this.isRearranging // Use a getter for properties
         };
 
+        //@ts-ignore -- this will be replaced with our CardRegistry.js eventually
+        this.cardRegistry = new Map([
+            ['sound', SoundCard],
+            ['notepad', NotepadCard],
+            ['timer', TimerCard]
+        ]);
+
     }
 
     async initialize() {
         loadGoogleFonts(['Wellfleet']);
         await this.db.openDB();
 
-        // I SUSPECT THIS SHOULD MOVE TO BOARDMANAGER
+        // I SUSPECT THIS SHOULD MOVE TO BOARDMANAGER - we need to rethink boardmanager more
         const urlParams = new URLSearchParams(window.location.search);
         const boardId = urlParams.get('board') || 'default';
         await BoardManager.addBoardId(boardId);
-
         await this._loadBoardData();
+
+        this.createDropIndicator();
         this.attachGlobalEventListeners();
     }
+
+    // #region LOADING AND SETTING UP THE BOARD ===============================================
 
     async _loadBoardData() {
         await this.loadTitle();
         await this.themeManager.init();
         await this.initBugMovement();
-        await this.loadCardsAndLayout();
+        await this.loadCards();
         await this.broadcastAllCommands();
     }
 
-
-    async loadCardsAndLayout() {
-        this.soundboardGrid.innerHTML = ''; // Clear the grid
-        this.allCards.clear(); // Clear the instance map
-
-        try {
-            const [allCardData, layoutData] = await Promise.all([
-                this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll'),
-                this.db.get(this.GRID_LAYOUT_KEY)
-            ]);
-
-            allCardData.forEach(cardData => {
-                let cardInstance;
-                switch (cardData.type) {
-                    case 'sound':
-                        cardInstance = new SoundCard(cardData, this.managerAPI, this.db);
-                        break;
-                    case 'notepad':
-                        cardInstance = new NotepadCard(cardData, this.managerAPI, this.db);
-                        break;
-                    case 'timer':
-                        cardInstance = new TimerCard(cardData, this.managerAPI, this.db);
-                        break;
-                    default:
-                        console.error(`Unknown card type: ${cardData.type}`);
-                        return;
-                }
-                this.allCards.set(cardData.id, cardInstance);
-            });
-
-            if (layoutData && Array.isArray(layoutData.layout)) {
-                this.gridLayout = layoutData.layout;
-            } else {
-                this.gridLayout = allCardData.map(cd => ({ type: cd.type, id: cd.id }));
-                this.gridLayout.push({ type: 'control', id: 'control-card' });
-                await this._saveLayout();
-            }
-
-            this.renderGrid();
-        } catch (error) {
-            console.error("Failed to load cards and layout:", error);
-        }
-    }
-
-    renderGrid() {
-        this.soundboardGrid.innerHTML = '';
-        this.gridLayout.forEach(item => {
-            let cardElement = null;
-            if (item.type === 'control') {
-                cardElement = this.controlCardElement;
-                cardElement.style.display = 'flex';
-            } else {
-                const cardInstance = this.allCards.get(item.id);
-                if (cardInstance) {
-                    cardElement = cardInstance.cardElement;
-                }
-            }
-
-            if (cardElement) {
-                this.soundboardGrid.appendChild(cardElement);
-            }
-        });
+    createDropIndicator() {
+        this.dropIndicator = document.createElement('div');
+        this.dropIndicator.id = 'drop-indicator';
+        this.dropIndicator.style.display = 'none'; // Initially hidden
+        this.soundboardGrid.appendChild(this.dropIndicator);
     }
 
     toggleRearrangeMode() {
@@ -191,10 +151,7 @@ export class SoundboardManager {
         }
     }
 
-    // save the current grid layout to DB.
-    async _saveLayout() {
-        await this.db.save(this.GRID_LAYOUT_KEY, { id: this.GRID_LAYOUT_KEY, layout: this.gridLayout });
-    }
+    
 
     // dunno if this does anything really
     async requestPersistentStorage() {
@@ -331,7 +288,7 @@ export class SoundboardManager {
         }
     }
 
-//#endregion
+    //#endregion
 
     // #region Drag&Drop Handlers
     handleDragStart(event) {
@@ -388,7 +345,7 @@ export class SoundboardManager {
             if (fromIndex > -1 && toIndex > -1) {
                 // Swap the items in the layout array
                 [this.gridLayout[fromIndex], this.gridLayout[toIndex]] = [this.gridLayout[toIndex], this.gridLayout[fromIndex]];
-                await this._saveLayout();
+                await this.updateGrid();
                 this.renderGrid(); // Re-render the grid in the new order
             }
         }
@@ -405,58 +362,70 @@ export class SoundboardManager {
 
     // #region Card Management Methods ======================================
 
-    
+
     getCardById(id) {
         return this.allCards.get(id);
     }
 
-    async addCard(type) {
-        // we should refactor this to not use a map? I want this to be easily extensible for adding new card types.
-        // We will also have to refactor our 'add card' buttons into a more dynamic system, which makes this complex.
-        // additionally, we should have the base card RSSCard class able to create a whole new card with a new ID
-        // if one isn't being loaded from the database. I think that bit should be easy to implement.
+    async loadCards() {
+        this.allCards.clear();
 
-        //@ts-ignore
-        const cardMap = new Map([
-            ['sound', SoundCard],
-            ['notepad', NotepadCard],
-            ['timer', TimerCard]
+        // 1. Fetch all card and layout data from the database concurrently.
+        const [allCardData, layoutData] = await Promise.all([
+            this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll'),
+            this.db.get(this.GRID_LAYOUT_KEY)
         ]);
 
-        const CardClass = cardMap.get(type);
+        // 2. Create an instance for each card loaded from the database.
+        allCardData.forEach(cardData => {
+            const CardClass = this.cardRegistry.get(cardData.type);
+            if (CardClass) {
+                const cardInstance = new CardClass(cardData, this.managerAPI, this.db);
+                this.allCards.set(cardInstance.id, cardInstance);
+            }
+        });
+
+        // 3. Set the grid layout. If no layout is saved, create a default one.
+        if (layoutData && Array.isArray(layoutData.layout)) {
+            this.gridLayout = layoutData.layout;
+        } else {
+            // Fallback: create a layout from all loaded cards.
+            this.gridLayout = allCardData.map(cd => ({ type: cd.type, id: cd.id }));
+            this.gridLayout.push({ type: 'control', id: 'control-card' });
+            await this.updateGrid();
+        }
+
+        // 4. Render the UI a single time with the fully loaded state.
+        this.renderGrid();
+    }
+
+    async addCard(type) {
+
+        const CardClass = this.cardRegistry.get(type);
         if (!CardClass) {
             console.error(`Unknown Card Type: ${type}`);
             return;
         }
 
-        // Generate the new card's data *before* creating the instance. <-- this section has the logic that I think should move to RSSCard.js
-        const newId = await this.db.getNewId(type);
-        // Call the static Default() method correctly on the class.
-        const defaultData = CardClass.Default();
-        const newCardData = {
-            ...defaultData,
-            id: newId,
-            type: type
-        };
+        // Create the new card instance
+        const newCardInstance = Card.create(CardClass, this.managerAPI, this.db);
 
-        // Create the instance with the correct data and references.
-        // Pass `this` for the manager and `this.db` for the database instance.
-        const newCardInstance = new CardClass(newCardData, this.managerAPI, this.db);
+        // Add to manager's allCards list
+        this.allCards.set(newCardInstance.id, newCardInstance);
 
-        // Add the new card to our state and update the layout.
-        this.allCards.set(newId, newCardInstance);
+        // Add to layout state...
+        const controlCardIndex = this.gridLayout.children.findIndex(item => item.id === 'control-card');
 
-        // Insert the new card just before the control card for a predictable UI.
-        const controlCardIndex = this.gridLayout.findIndex(item => item.id === 'control-card');
+        const newItem = { type: newCardInstance.data.type, id: newCardInstance.id };
         if (controlCardIndex !== -1) {
-            this.gridLayout.splice(controlCardIndex, 0, { type: type, id: newId });
+            this.gridLayout.children.splice(controlCardIndex, 0, newItem);
         } else {
-            this.gridLayout.push({ type: type, id: newId });
+            this.gridLayout.children.push(newItem);
         }
 
-        // Save everything and re-render the grid.
-        await this.db.save(newId, newCardInstance.data);
-        await this._saveLayout();
+        // Persist the changes (this is the async part).
+        await this.db.save(newCardInstance.id, newCardInstance.data);
+        await this.updateGrid();
         this.renderGrid();
     }
 
@@ -471,33 +440,56 @@ export class SoundboardManager {
             return;
         }
 
-        // 1. Clean up the card instance (e.g., stop audio, clear intervals).
+        // 1. Perform cleanup on the instance itself.
         if (typeof cardInstance.destroy === 'function') {
             cardInstance.destroy();
         }
+        this.unregisterCardCommands(cardInstance.id);
 
-        // 2. Remove the card from the DOM.
-        cardInstance.cardElement.remove();
-
-        // 2.5 unregister card commands
-        this.unregisterCardCommands(cardInstance.id)
-
-        // 3. Remove the card from our in-memory state.
+        // 2. Remove from in-memory state and database.
         this.allCards.delete(cardIdToRemove);
-
-        // 4. Update the grid layout.
-        this.gridLayout = this.gridLayout.filter(item => item.id !== cardIdToRemove);
-
-        // 5. Persist the changes to the database.
         await this.db.delete(cardIdToRemove);
-        await this._saveLayout();
 
-        // 6. Notify other components (like Timers) that a card was removed.
-        MSG.say(MSG.is.SOUNDBOARD_DELETED_CARD, { deletedId: cardIdToRemove });
+        // 3. Create the new layout by filtering out the removed card.
+        const newGridLayout = this.gridLayout.filter(item => item.id !== cardIdToRemove);
 
-        console.log(`Successfully removed card: ${cardIdToRemove}`);
+        // 4. Call updateGrid to save the new layout and re-render.
+        await this.updateGrid(newGridLayout);
+        MSG.log(`Successfully removed card: ${cardIdToRemove}`);
     }
 
+    async updateGrid(newGridLayout = this.gridLayout) {
+        // 1. Update the in-memory layout state.
+        this.gridLayout = newGridLayout;
+
+        // 2. Persist the new layout to the database.
+        await this.db.save(this.GRID_LAYOUT_KEY, { id: this.GRID_LAYOUT_KEY, layout: this.gridLayout });
+
+        // 3. Re-render the UI to reflect the changes.
+        this.renderGrid();
+    }
+
+
+
+    renderGrid() {
+        this.soundboardGrid.innerHTML = '';
+        this.gridLayout.forEach(item => {
+            let cardElement = null;
+            if (item.type === 'control') {
+                cardElement = this.controlCardElement;
+                cardElement.style.display = 'flex';
+            } else {
+                const cardInstance = this.allCards.get(item.id);
+                if (cardInstance) {
+                    cardElement = cardInstance.cardElement;
+                }
+            }
+
+            if (cardElement) {
+                this.soundboardGrid.appendChild(cardElement);
+            }
+        });
+    }
 
     handleCardCommand(command) {
         MSG.log(`SoundboardManager.handleCardCommand(${command})`)
@@ -506,7 +498,7 @@ export class SoundboardManager {
             // Use the properties directly from the command object
             return targetCard[command.handler](...(command.args || []));
         } else {
-            MSG.log(`Invalid command: ${command}\nTarget Card: ${targetCard}`,1)
+            MSG.log(`Invalid command: ${command}\nTarget Card: ${targetCard}`, 1)
         }
     }
 

@@ -1,4 +1,4 @@
-import { Card } from "./RSSCard.js";
+import { Card } from "./-Card.js";
 
 export class NotepadCard extends Card {
 
@@ -17,8 +17,7 @@ export class NotepadCard extends Card {
     }
 
     constructor(cardData, soundboardManager, dbInstance) {
-        const completeCardData = { ...NotepadCard.Default(), ...cardData }
-        super(completeCardData, soundboardManager, dbInstance)
+        super(cardData, soundboardManager, dbInstance)
 
         // DOM Elements
         //@ts-ignore
@@ -43,13 +42,16 @@ export class NotepadCard extends Card {
     _attachListeners() {
 
         this.contentElement.addEventListener('input', () => {
+            //@ts-ignore
             this.data.pages[this.data.currentPageIndex].content = this.contentElement.value;
             this.updateData({pages: this.data.pages})
         });
 
         this.contentElement.addEventListener('mouseup', () => {
             // Only save if a height style was actually set by resizing
+            //@ts-ignore
             if (this.contentElement.style.height) {
+                //@ts-ignore
                 this.data.height = this.contentElement.style.height;
                 this.updateData({height: this.data.height});
             }

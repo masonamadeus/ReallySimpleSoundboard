@@ -1,6 +1,6 @@
 import { getAudioDuration, getContrastColor, debounce, randomButNot, lerp } from './helper-functions.js';
 import { AudioPlayer } from './AudioPlayer.js';
-import { Card } from './RSSCard.js';
+import { Card } from './-Card.js';
 import { MSG } from './MSG.js';
 
 // SECRET PHRASE: MASHED PERDADERS
@@ -26,8 +26,10 @@ export class SoundCard extends Card {
             priority: false,
             autoplay: false,
             files: [],
-            duckFactor: 0.4,
-            duckTime: 350
+            duckFactor: 0.4, // how much to duck under priority
+            duckSpeed: 350, // how long to lerp in ms
+            duckOffsetMs: 150,
+            unduckOffsetMs: 350 // overlap the ducking window on start/end 
         };
     }
 
@@ -36,14 +38,7 @@ export class SoundCard extends Card {
     }
 
     constructor(cardData, soundboardManager, dbInstance) {
-        const completeCardData = { ...SoundCard.Default(), ...cardData };
-        super(completeCardData, soundboardManager, dbInstance)
-
-        this.data.files.forEach(fileData => this._processFile(fileData));
-        this.player = new AudioPlayer(() => this._handlePlaybackCompletion());
-        this.activePriorityPlayers = new Set();
-
-        this.isDucked = false;
+        super(cardData, soundboardManager, dbInstance)
 
         // BINDINGS
         this.boundPriorityPlayHandler = this._handlePriorityPlay.bind(this);
@@ -57,6 +52,37 @@ export class SoundCard extends Card {
         this.boundHandleModalFormInput = this._handleModalFormInput.bind(this);
         this.boundDeleteCard = this._handleDeleteCard.bind(this);
 
+        // GET DOM ELEMENTS
+        this._getDOMElemons();
+
+
+        this.data.files.forEach(fileData => this._processFile(fileData));
+
+        this.player = new AudioPlayer({
+            cardElement: this.cardElement,
+            progressOverlay: this.elements.progressOverlay,
+            onPlay: this.onPlay.bind(this),
+            onStop: this.onStop.bind(this),
+            onEnded: this.onEnded.bind(this),
+            onFlagFired: this.onFlagFired.bind(this),
+        })
+
+        this.currentFileIndex = -1;
+
+        this.activePriorityPlayers = new Set();
+
+        this.isDucked = false;
+        this.priorityActive = false;
+        this.duckStartTimeout = null;
+
+        this.settings = {};
+
+        this._initialize();
+    }
+
+
+
+    _getDOMElemons() {
         // DOM REFERENCES
         /**
          * @typedef {object} Elements
@@ -81,14 +107,6 @@ export class SoundCard extends Card {
             //@ts-ignore
             settingsModalTemplate: document.getElementById('sound-card-template').content.querySelector('.sound-settings-modal')
         };
-
-        this.settings = {};
-
-        // The player needs references to the card and its progress bar for the glow effect
-        this.player.progressOverlay = this.elements.progressOverlay;
-        this.player.cardElement = this.cardElement;
-
-        this._initialize();
     }
 
     _initialize() {
@@ -102,7 +120,7 @@ export class SoundCard extends Card {
         this.data.files.forEach((file, index) => {
             // If a file from the DB is missing the duration, it needs migrating.
             if (file.durationMs === undefined) {
-                this.manager.handleCardMigration( {
+                this.manager.handleCardMigration({
                     card: this,
                     file: file,
                     fileIndex: index
@@ -134,22 +152,26 @@ export class SoundCard extends Card {
     getFileInfo(index) {
         const file = this.data.files[index];
         if (!file) {
-            return new Card.PreloadTicket(); // Return a default ticket if file not found
+            return new Card.Ticket(); // Return a default ticket if file not found
         }
         // Creates a standardized ticket with the file's duration and no specific args needed.
-        return new Card.PreloadTicket({
-            durationMs: file.durationMs || 0, 
-            args: { specificIndex: index 
-        }});
+        return new Card.Ticket({
+            durationMs: file.durationMs || 0,
+            args: {
+                specificIndex: index
+            }
+        });
     }
 
     getNextPlaybackInfo() {
         const nextIndex = this._determineNextFileIndex();
 
-        if (nextIndex === null) return new Card.PreloadTicket({
-            durationMs: 0, 
-            args: { specificIndex: null
-        }});
+        if (nextIndex === null) return new Card.Ticket({
+            durationMs: 0,
+            args: {
+                specificIndex: null
+            }
+        });
 
         return this.getFileInfo(nextIndex)
     }
@@ -227,8 +249,10 @@ export class SoundCard extends Card {
     }
 
 
+
     destroy() {
-        this.player.cleanup();
+        this.player.destroy();
+        clearTimeout(this.duckStartTimeout);
         MSG.off(MSG.is.SOUNDCARD_PRIORITY_STARTED, this.boundPriorityPlayHandler);
         MSG.off(MSG.is.SOUNDCARD_PRIORITY_ENDED, this.boundPriorityStopHandler);
         super.destroy();
@@ -268,47 +292,97 @@ export class SoundCard extends Card {
 
         // If looping, it will always replay the current file.
         if (this.data.loop) {
-            return this.player.playback.currentFileIndex;
+            return this.currentFileIndex;
         }
 
         // If shuffle is on, pick a new random file that isn't the current one.
         if (this.data.shuffle) {
-            return randomButNot(0, this.data.files.length, this.player.playback.currentFileIndex);
+            return randomButNot(0, this.data.files.length, this.currentFileIndex);
         }
 
         // Otherwise, proceed to the next file in order, wrapping around to the start.
-        let nextIndex = this.player.playback.currentFileIndex + 1;
+        let nextIndex = this.currentFileIndex + 1;
         if (nextIndex >= this.data.files.length) {
             nextIndex = 0;
         }
         return nextIndex;
     }
 
-    playFile(fileIndex) {
+
+
+    //#endregion
+
+    // ================================================================================================
+    // #region AUDIO LOGIC METHODS 
+    // ================================================================================================
+
+    async playFile(fileIndex) {
         const fileData = this.data.files[fileIndex];
         if (!fileData) {
             console.error(`File not found at index ${fileIndex} for button ${this.data.id}`);
             return;
         }
 
-        this.player.cleanup();
-        const blob = new Blob([fileData.arrayBuffer], { type: fileData.mimeType });
-        this.player.audio.src = URL.createObjectURL(blob);
-        this.player.audio.volume = this.data.volume;
-        this.player.audio.playbackRate = this.data.playbackRate;
-
-        this.player.audio.play().catch(e => console.error("Playback error:", e));
-
-        if (this.data.priority) {
-            // ANNOUNCE to all other components that a priority sound has started.
-            MSG.say(MSG.is.SOUNDCARD_PRIORITY_STARTED, { cardId: this.data.id });
+        try {
+            await this.player.play(fileData.arrayBuffer, {
+                volume: this.data.volume,
+                playbackRate: this.data.playbackRate,
+                flagOffsetMs: this.data.unduckOffsetMs
+            });
+        } catch (error) {
+            console.error("Error during playback:", error)
         }
     }
 
-    //#endregion
+    onPlay() {
+         if (this.data.priority) {
+        // Always clear any lingering timeout from a previous, uncompleted play attempt
+        clearTimeout(this.duckStartTimeout);
 
-    // --- AUDIO LOGIC METHODS ---
+        // Set a timeout to DELAY the start of the ducking process
+        this.duckStartTimeout = setTimeout(() => {
+            this.priorityActive = true;
+            MSG.say(MSG.is.SOUNDCARD_PRIORITY_STARTED, { cardId: this.id });
+        }, this.data.duckOffsetMs);
+    }
+    }
 
+    onStop() {
+        // This is now the master cleanup handler for all stop scenarios.
+
+        // 1. Always clear the start timeout. If it hasn't fired yet, this prevents it from ever firing.
+        clearTimeout(this.duckStartTimeout);
+
+        // 2. If priority mode was successfully activated, send the "ended" signal.
+        // This acts as a reliable fallback for manual stops.
+        if (this.data.priority && this.priorityActive) {
+            this.priorityActive = false; // Prevent this from firing again
+            MSG.say(MSG.is.SOUNDCARD_PRIORITY_ENDED, { cardId: this.id });
+        }
+    }
+
+    // HANDLES WHAT HAPPENS AFTER a sound finishes ON ITS OWN
+    onEnded() {
+        // This logic should ONLY run when a track finishes naturally.
+        if (this.data.loop) {
+            this.playFile(this.currentFileIndex);
+        } else if (this.data.autoplay) {
+            const nextFileIndex = this._determineNextFileIndex();
+            if (nextFileIndex !== null) {
+                this.currentFileIndex = nextFileIndex;
+                this.playFile(nextFileIndex);
+            }
+        }
+    }
+
+    onFlagFired() {
+        // This is the PREFERRED "early unduck" signal.
+        // It only fires if priority mode was successfully activated (i.e., after the initial delay).
+        if (this.data.priority && this.priorityActive) {
+            this.priorityActive = false; // Set to false FIRST to prevent onStop from re-firing.
+            MSG.say(MSG.is.SOUNDCARD_PRIORITY_ENDED, { cardId: this.id });
+        }
+    }
 
     /**
     * Handles playing or stopping the sound. This is the main user interaction point.
@@ -318,15 +392,7 @@ export class SoundCard extends Card {
 
         // --- If a sound is playing, the user's click means "STOP". ---
         if (this.player.isPlaying) {
-            this.player.cleanup(); // Stops audio and resets the progress overlay.
-
-            // If it was a priority sound, announce that it has stopped.
-            if (this.data.priority) {
-                MSG.say(MSG.is.SOUNDCARD_PRIORITY_ENDED, { cardId: this.data.id });
-            }
-
-            // That's it. We just stop. We don't advance the index or trigger autoplay.
-            // The currentFileIndex remains, so the next click will correctly determine the *next* file.
+            this.player.stop();
             return;
         }
 
@@ -339,7 +405,7 @@ export class SoundCard extends Card {
         }
 
         if (indexToPlay !== null) {
-            this.player.playback.currentFileIndex = indexToPlay; // Update our state
+            this.currentFileIndex = indexToPlay; // Update our state
             this.playFile(indexToPlay);
         }
     }
@@ -349,44 +415,33 @@ export class SoundCard extends Card {
         //add card to the active priority players list
         this.activePriorityPlayers.add(cardId);
 
-        // If a priority sound started, AND it's not me, AND I'm not priority, AND I'm playing...
+
         if (!this.isDucked && this.data.id !== cardId && !this.data.priority) {
-            // ...then I should quiet down.
-            this.isDucked = true;
-            const targetVolume = this.data.duckFactor * this.data.volume;
-            this.lerpVolume(targetVolume, this.data.duckTime); // Duck the volume
+            this.duck();
         }
     }
 
     _handlePriorityStop({ cardId }) {
         this.activePriorityPlayers.delete(cardId)
         // When a priority sound stops, I can return to my normal volume.
-        if (!this.data.priority && this.isDucked && this.activePriorityPlayers.size === 0) {
-            this.isDucked = false;
-            this.lerpVolume(this.data.volume, this.data.duckTime);
+        if (!this.data.priority && this.activePriorityPlayers.size === 0) {
+            this.unduck();
         }
     }
 
-    /**
- * Handles what happens AFTER a sound finishes playing ON ITS OWN.
- */
-    _handlePlaybackCompletion() {
-        if (this.data.priority) {
-            // Announce the priority sound has finished naturally.
-            MSG.say(MSG.is.SOUNDCARD_PRIORITY_ENDED, { cardId: this.data.id });
-        }
-
-        if (this.data.loop) {
-            this.playFile(this.player.playback.currentFileIndex); // Replay the current file
-        } else if (this.data.autoplay) {
-            const nextFileIndex = this._determineNextFileIndex(); // Find the next file
-            if (nextFileIndex !== null) {
-                this.player.playback.currentFileIndex = nextFileIndex; // Update state
-                this.playFile(nextFileIndex); // Play it
-            }
-        }
-        // If neither loop nor autoplay is on, do nothing. The sound just stops.
+    duck(factor = this.data.duckFactor, speed = this.data.duckSpeed) {
+        if (this.isDucked || this.data.priority) return;
+        this.isDucked = true;
+        const targetVolume = this.data.volume * factor
+        this.lerpVolume(targetVolume, speed)
     }
+
+    unduck(speed = this.data.duckSpeed) {
+        if (!this.isDucked) return;
+        this.isDucked = false;
+        this.lerpVolume(this.data.volume, speed);
+    }
+
 
     /**
     * Smoothly transitions the card's volume to a target value over a duration.
@@ -405,8 +460,9 @@ export class SoundCard extends Card {
         });
     }
 
-    // ===================================
-    // SETTINGS MODAL METHODS
+    //#endregion
+    // ==========================================================================================================
+    // #region SETTINGS MODAL METHODS
     // ==================================
 
     openSettings() {
@@ -500,7 +556,7 @@ export class SoundCard extends Card {
     async _handleClearFiles() {
         const confirmed = await this.manager.showConfirmModal("Are you sure you want to clear all audio files for this button?");
         if (confirmed) {
-            this.player.cleanup();
+            this.player.stop();
             await this.updateData({ files: [] });
             this._renderFileList();
         }
@@ -511,7 +567,7 @@ export class SoundCard extends Card {
 
         const fileIndex = parseInt(event.target.dataset.fileIndex, 10);
         if (!isNaN(fileIndex)) {
-            this.player.cleanup(); // Stop playback if the removed file was playing
+            this.player.stop(); // Stop playback if the removed file was playing
             this.data.files.splice(fileIndex, 1);
             await this.updateData({ files: this.data.files });
             this._renderFileList();
@@ -573,6 +629,6 @@ export class SoundCard extends Card {
         }
     }
 
-
+    //#endregion
 
 }

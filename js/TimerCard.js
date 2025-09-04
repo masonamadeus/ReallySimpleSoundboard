@@ -1,5 +1,5 @@
 import { debounce, randomButNot } from "./helper-functions.js";
-import { Card } from "./RSSCard.js";
+import { Card } from "./-Card.js";
 import { MSG } from './MSG.js';
 
 export class TimerCard extends Card {
@@ -35,8 +35,7 @@ export class TimerCard extends Card {
     }
 
     constructor(cardData, soundboardManager, dbInstance) {
-        const completeCardData = { ...TimerCard.Default(), ...cardData }
-        super(completeCardData, soundboardManager, dbInstance);
+        super(cardData, soundboardManager, dbInstance);
 
         // TITLE AND DISPLAY
         /** @type {HTMLElement} */
