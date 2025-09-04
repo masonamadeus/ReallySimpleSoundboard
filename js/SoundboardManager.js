@@ -339,12 +339,12 @@ export class SoundboardManager {
             const fromId = this.draggedItem.dataset.cardId;
             const toId = targetCard.dataset.cardId;
 
-            const fromIndex = this.gridLayout.findIndex(item => item.id === fromId);
-            const toIndex = this.gridLayout.findIndex(item => item.id === toId);
+            const fromIndex = this.gridLayout.children.findIndex(item => item.id === fromId);
+            const toIndex = this.gridLayout.children.findIndex(item => item.id === toId);
 
             if (fromIndex > -1 && toIndex > -1) {
                 // Swap the items in the layout array
-                [this.gridLayout[fromIndex], this.gridLayout[toIndex]] = [this.gridLayout[toIndex], this.gridLayout[fromIndex]];
+                [this.gridLayout.children[fromIndex], this.gridLayout.children[toIndex]] = [this.gridLayout.children[toIndex], this.gridLayout.children[fromIndex]];
                 await this.updateGrid();
                 this.renderGrid(); // Re-render the grid in the new order
             }
@@ -387,10 +387,10 @@ export class SoundboardManager {
 
         // 3. Set the grid layout. If no layout is saved, create a default one.
         if (layoutData && Array.isArray(layoutData.layout)) {
-            this.gridLayout = layoutData.layout;
+            this.gridLayout.children = layoutData.layout;
         } else {
             // Fallback: create a layout from all loaded cards.
-            this.gridLayout = allCardData.map(cd => ({ type: cd.type, id: cd.id }));
+            this.gridLayout.children = allCardData.map(cd => ({ type: cd.type, id: cd.id }));
             this.gridLayout.push({ type: 'control', id: 'control-card' });
             await this.updateGrid();
         }
@@ -463,7 +463,7 @@ export class SoundboardManager {
         this.gridLayout = newGridLayout;
 
         // 2. Persist the new layout to the database.
-        await this.db.save(this.GRID_LAYOUT_KEY, { id: this.GRID_LAYOUT_KEY, layout: this.gridLayout });
+        await this.db.save(this.GRID_LAYOUT_KEY, { id: this.GRID_LAYOUT_KEY, layout: this.gridLayout.children });
 
         // 3. Re-render the UI to reflect the changes.
         this.renderGrid();
@@ -473,7 +473,7 @@ export class SoundboardManager {
 
     renderGrid() {
         this.soundboardGrid.innerHTML = '';
-        this.gridLayout.forEach(item => {
+        this.gridLayout.children.forEach(item => {
             let cardElement = null;
             if (item.type === 'control') {
                 cardElement = this.controlCardElement;

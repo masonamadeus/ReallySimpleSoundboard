@@ -439,28 +439,33 @@ export class TimerCard extends Card {
 
         const currentElapsed = (this.data.elapsedMs || 0) + (Date.now() - this.data.startTime);
         const remainingMs = this.data.targetDurationMs - currentElapsed;
-
-        // --- Unified End Action Trigger Logic ---
         const endAction = this.data.endAction;
-        if (endAction.commandId && !endAction.triggered && remainingMs <= endAction.durationMs) {
-            MSG.log(`Triggering End Action from ${this.data.title}`)
+
+
+        if (this.data.mode === 'timer' && remainingMs <= 0) {
+        // If an end action was supposed to fire but hasn't, fire it now as a fallback.
+        if (endAction.commandId && !endAction.triggered) {
+            MSG.log(`Fallback End Action Fired from ${this.data.title}`)
             this.executeCommand(endAction.commandId, endAction.args);
-            // Use the correct syntax to update the nested 'triggered' flag
-            const newEndActionState = { ...endAction, triggered: true };
-            this.updateData({ endAction: newEndActionState });
         }
 
-        // --- Unified Timer Completion Logic ---
-        if (this.data.mode === 'timer' && remainingMs <= 0) {
-            if (this.data.isLooping) {
-                this.reset();
-                this.handlePlayPause(); // This will auto-start the next loop
-            } else {
-                this.updateData({ isRunning: false, elapsedMs: this.data.targetDurationMs });
-                this.updateUI();
-            }
-            return; // Stop the loop for this frame
+        if (this.data.isLooping) {
+            this.reset();
+            this.handlePlayPause(); // This will auto-start the next loop
+        } else {
+            this.updateData({ isRunning: false, elapsedMs: this.data.targetDurationMs });
+            this.updateUI();
         }
+        return; // IMPORTANT: Stop the loop for this frame
+    }
+
+    // --- End Action Trigger Logic (for pre-firing the sound) ---
+    if (endAction.commandId && !endAction.triggered && remainingMs <= endAction.durationMs) {
+        MSG.log(`Triggering End Action from ${this.data.title}`)
+        this.executeCommand(endAction.commandId, endAction.args);
+        const newEndActionState = { ...endAction, triggered: true };
+        this.updateData({ endAction: newEndActionState });
+    }
 
         this.renderDisplay(currentElapsed);
         this.animationFrameId = requestAnimationFrame(() => this.tick());
