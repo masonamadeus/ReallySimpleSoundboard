@@ -122,6 +122,7 @@ body {
 #soundboard-title:hover,
 #soundboard-title:focus {
     background-color: var(--panel-color);
+    color: var(--panel-color-text);
     outline: none;
 }
 
@@ -268,14 +269,16 @@ input[type="range"]::-moz-range-thumb {
     cursor: grab;
 }
 
+.sound-card.grid-item-dragging {
+    display: none;
+}   
+
 .drop-placeholder {
     background-color: rgba(0, 0, 0, 0.1);
     border: 2px dashed var(--highlight-color);
     border-radius: 4px;
-    /* Ensure it takes up at least a minimum size */
-    min-height: 100%; 
-    /* This forces the grid to give it space */
-    align-self: start;
+    min-height: 100px; /* Ensure it's visible */
+    margin: 0.5rem 0;
 }
 
 .drag-image-custom {
@@ -613,66 +616,88 @@ timer-display span {
 /* =================================================================== */
 .notepad-card {
     align-self: stretch;
-    /* Allows notepad to fill vertical space, overriding .sound-card */
 }
 
-.notepad-tabs {
+.notepad-header {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
+    justify-content: space-between;
+    align-items: center;
     width: 100%;
+    gap: 0.5rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--secondary-color);
 }
 
-.notepad-tab,
-.add-page-btn {
-    border: 1px solid var(--secondary-color);
+/* Custom Dropdown Styling */
+.notepad-page-dropdown {
+    position: relative; /* Anchor for the absolute-positioned list */
+    flex-grow: 1;
+}
+
+.dropdown-selected {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    font-size: 1.1rem;
+    font-family: var(--font-family-primary);
+    border: 1px solid var(--primary-color);
     background-color: var(--background-color);
-    padding: 0.4rem;
+    color: var(--background-color-text);
+    border-radius: 4px;
     cursor: pointer;
+}
+
+.dropdown-selected .selected-title[contenteditable="true"] {
+    outline: 2px solid var(--highlight-color);
+}
+
+.dropdown-arrow {
     font-size: 0.8rem;
 }
 
-.add-page-btn {
-    margin-left: auto;
-    background-color: var(--highlight-color);
-    color: var(--highlight-color-text);
-    font: var(--font-family-primary);
-    font-weight: 800;
+.dropdown-list {
+    display: none; /* Hidden by default */
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background-color: var(--background-color);
+    border: 1px solid var(--primary-color);
+    border-top: none;
+    max-height: 150px;
+    overflow-y: auto;
+    z-index: 1002; /* Appear above other elements */
 }
 
-.notepad-tab-title {
+.notepad-page-dropdown.open .dropdown-list {
+    display: block; /* Show when open */
+}
+
+.dropdown-list .page-option,
+.dropdown-list .add-page-option {
+    padding: 0.5rem;
     cursor: pointer;
-    outline: none;
-    font-size: 1rem;
-    white-space: nowrap;
-    user-select: none;
-    padding-right: 0.5rem;
 }
 
-.notepad-tab.active {
+.dropdown-list .page-option:hover,
+.dropdown-list .add-page-option:hover {
     background-color: var(--accent-color);
     color: var(--accent-color-text);
-    font-weight: bold;
-    border-color: var(--accent-color);
 }
 
-.notepad-tab.active .notepad-tab-title {
-    cursor: text;
+.dropdown-list .add-page-option {
+    font-style: italic;
+    border-top: 1px solid var(--secondary-color);
 }
+/* --- End Custom Dropdown --- */
 
-.delete-page-btn {
-    color: darkred;
-    font-weight: bold;
-    cursor: pointer;
-    padding: 0.2rem;
-    margin-right: 0.5rem;
+.notepad-header > .delete-page-btn {
+    padding: 0.5rem;
     font-size: 1rem;
-}
-
-.delete-page-btn:hover {
-    background-color: rgba(0, 0, 0, 0.2);
+    min-width: 40px;
+    flex-shrink: 0;
+    border-radius: 4px;
 }
 
 .notepad-content {
@@ -681,22 +706,18 @@ timer-display span {
     border: none;
     background-color: var(--secondary-color);
     padding: 0.5rem;
-    font-family: sans-serif;
     font-size: 1rem;
     color: var(--secondary-color-text);
     resize: vertical;
     box-sizing: border-box;
     min-height: 150px;
-    font: var(--font-family-primary);
+    font-family: var(--font-family-primary);
 }
 
-.notepad-content:focus {
-    outline: 1px solid var(--highlight-color);
-}
-
-/* =================================================================== */
+/*  =================================================================== */
 /* MODALS
-        /* =================================================================== */
+/* =================================================================== */
+
 .modal,
 .confirm-modal {
     display: none;

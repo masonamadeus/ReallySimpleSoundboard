@@ -1,4 +1,6 @@
-import { MSG } from './MSG.js';
+import { MSG } from '../Core/MSG.js';
+
+//#region TICKET CLASS
 class Ticket {
     /**
      * @param {object} options
@@ -24,7 +26,9 @@ class Ticket {
         }
     }
 }
+//#endregion
 
+//#region CARD CLASS
 // what if we changed how we handle 'type' entirely, by making indexedDB create a store based on the class name of whatever card
 export class Card {
 
@@ -34,8 +38,8 @@ export class Card {
     /**
      * The constructor for all card types.
      * @param {object} cardData The initial data for the card from the database.
-     * @param {import('./SoundboardManager.js').SoundboardManager} soundboardManagerAPI A reference to the main manager.
-     * @param {import('./SoundboardDB.js').SoundboardDB} dbInstance A reference to the database.
+     * @param {import('../Managers/SoundboardManager.js').SoundboardManager} soundboardManagerAPI A reference to the main manager.
+     * @param {import('../Core/SoundboardDB.js').SoundboardDB} dbInstance A reference to the database.
      */
     constructor(cardData, soundboardManagerAPI, dbInstance) {
         //@ts-ignore yes it does exist
@@ -57,7 +61,7 @@ export class Card {
     }
 
 // ======================= OVERRIDE ALL THESE BITCHES OR ELSE =================================
-
+//#region Override Methods
     /**
      * A getter that child classes MUST override to provide their template ID.
      * @returns {string} The template ID for the card (e.g., 'timer-card-template').
@@ -110,7 +114,10 @@ export class Card {
     destroy() {
     }
 
-// ============= COMMAND USE LOGIC =================
+    //#endregion
+
+// ============= COMMAND LOGIC =================
+//#region Command Logic
 
     _rebuildCommands() {
         this.commands = [];
@@ -192,9 +199,17 @@ export class Card {
         return command;
     }
 
+    refreshAvailableCommands(allCommands) {
+        this.allCommands = allCommands;
+        // This calls the function provided by the subclass (e.g., populateCommandSelectors).
+        this.onCommandsChanged(this.allCommands);
+    }
+
+    //#endregion
+
     // ========================================================================================================
     // DADDY LEVEL METHODS
-    // ========================================================================================================
+    // #region Data Management
 
     static create(CardClass, managerAPI, db) {
         const type = CardClass.Default().type; // Get type from the default data
@@ -223,11 +238,7 @@ export class Card {
         }
     }
     
-    refreshAvailableCommands(allCommands) {
-        this.allCommands = allCommands;
-        // This calls the function provided by the subclass (e.g., populateCommandSelectors).
-        this.onCommandsChanged(this.allCommands);
-    }
+    
 
    /**
      * Creates the card's main HTML element from a template.
@@ -243,7 +254,7 @@ export class Card {
 
         cardElement.dataset.cardId = this.data.id;
         cardElement.dataset.cardType = this.data.type;
-        cardElement.setAttribute('draggable', this.manager.isRearranging);
+        cardElement.setAttribute('draggable', this.manager.getRearrangeMode);
 
         return cardElement;
     } 
@@ -256,4 +267,6 @@ export class Card {
             this.manager.removeCard(this.data.id);
         }
     }
+
+    //#endregion
 }

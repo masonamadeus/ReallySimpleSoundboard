@@ -1,21 +1,17 @@
-import { AudioPlayer } from './AudioPlayer.js';
-import { Card } from './-Card.js';
-import { SoundboardDB } from './SoundboardDB.js';
+import { AudioPlayer } from '../Core/AudioPlayer.js';
+import { Card } from '../Cards/BaseCard.js';
+import { SoundboardDB } from '../Core/SoundboardDB.js';
 import { BoardManager } from './BoardManager.js';
 import { ThemeManager } from './ThemeManager.js';
 import {
     getAudioDuration, arrayBufferToBase64, base64ToArrayBuffer,
     loadGoogleFonts, slugify, formatIdAsTitle, formatBytes,
     debounce
-} from './helper-functions.js';
-import { MSG } from './MSG.js';
+} from '../Core/helper-functions.js';
+import { MSG } from '../Core/MSG.js';
 import { GridManager, Layout, LayoutNode } from './LayoutManager.js';
-import { CardRegistry } from './CardRegistry.js';
+import { CardRegistry } from '../Core/CardRegistry.js';
 
-// we will get rid of the following once we implement CardRegistry.js
-import { SoundCard } from './SoundCard.js';
-import { NotepadCard } from './NotepadCard.js';
-import { TimerCard } from './TimerCard.js';
 
 // ====================================================================
 // SECTION: Application Manager Class
@@ -24,43 +20,49 @@ import { TimerCard } from './TimerCard.js';
 // ====================================================================
 
 export class SoundboardManager {
+
+    //#region Constructor
     constructor(dbInstance) {
         this.db = dbInstance;
         this.soundboardGrid = document.getElementById('soundboard-grid');
         this.controlDock = document.getElementById('control-dock');
 
-        this.managerAPI = {
-            getCardById: this.getCardById.bind(this),
-            showConfirmModal: this.showConfirmModal.bind(this),
-            removeCard: this.removeCard.bind(this),
-            registerCardCommands: this.registerCardCommands.bind(this),
-            handleCardCommand: this.handleCardCommand.bind(this),
-            handleCardMigration: this.handleCardMigration.bind(this),
-            getIsRearranging: () => this.gridManager.isRearranging // Use a getter for properties
-        };
-
         this.allCards = new Map(); // Stores all card instances, keyed by their unique ID.
         this.allCardCommands = new Map(); // Stores all card commands, keyed by the card ID
 
-        this.gridManager = new GridManager(
-            this.soundboardGrid,
-            this.controlDock,
-            this.allCards,
-            this.db,
-            (newLayout) => this.saveLayout(newLayout),
-            (type, parentId, index) => this.addCard(type, parentId, index)
-        );
+        
 
         this.GRID_LAYOUT_KEY = 'grid-layout';
 
         this.migrationQueue = [];
         this.isMigrating = false;
         
+        this.managerAPI = {
+            getCardById: this.getCardById.bind(this),
+            showConfirmModal: this.showConfirmModal.bind(this),
+            addCard: this.addCard.bind(this),
+            moveCard: this.moveCard.bind(this),
+            removeCard: this.removeCard.bind(this),
+            saveLayout: this.saveLayout.bind(this),
+            registerCardCommands: this.registerCardCommands.bind(this),
+            handleCardCommand: this.handleCardCommand.bind(this),
+            handleCardMigration: this.handleCardMigration.bind(this),
+            isRearrangeMode: this.getRearrangeMode.bind(this)
+        };
+
+        this.gridManager = new GridManager(
+            this.managerAPI,
+            this.soundboardGrid,
+            this.controlDock,
+            this.allCards,
+        );
+
         this.themeManager = new ThemeManager(this.db, new SoundboardDB('default'), this.managerAPI);
         this.boardManager = new BoardManager();
-
         
     }
+
+    //#endregion
 
     // #region Lifecycle
     async initialize() {
@@ -87,7 +89,7 @@ export class SoundboardManager {
 
     // #region Card Management
     async addCard(type, parentId = 'root', index = -1) { // Add parentId and default it to 'root'
-        const CardClass = CardRegistry.get(type);
+        const CardClass = await CardRegistry.get(type);
         if (!CardClass) return;
 
         const newCardInstance = Card.create(CardClass, this.managerAPI, this.db);
@@ -104,6 +106,15 @@ export class SoundboardManager {
 
         await this.saveLayout(this.gridManager.layout);
     }
+
+    async moveCard(cardId, newParentId, newIndex) {
+    const { node } = this.gridManager.layout.findNodeAndParent(cardId);
+    if (node) {
+        this.gridManager.layout.removeNode(cardId);
+        this.gridManager.layout.insertNode(node, newParentId, newIndex);
+        await this.saveLayout(this.gridManager.layout);
+    }
+}
 
     /**
     * Safely removes a card from the application by its unique ID.
@@ -128,6 +139,10 @@ export class SoundboardManager {
         
         // Save the updated layout, which also re-renders the grid
         await this.saveLayout(this.gridManager.layout);
+    }
+
+    getCardById(id) {
+        return this.allCards.get(id);
     }
 
     async loadCardsAndLayout() {
@@ -162,9 +177,6 @@ export class SoundboardManager {
         this.gridManager.render(currentLayout);
     }
 
-    getCardById(id) {
-        return this.allCards.get(id);
-    }
     // #endregion
 
     // #region Layout
@@ -245,6 +257,10 @@ export class SoundboardManager {
     // #endregion
 
     // #region UI & Modals
+    getRearrangeMode(){
+        return this.gridManager.isRearranging;
+    }
+
     showConfirmModal(message) {
         return new Promise(resolve => {
             const modal = document.getElementById('confirm-modal');
@@ -657,7 +673,7 @@ export class SoundboardManager {
                 // Use a composite key to avoid collisions: "sound-0"
                 idMap.set(`sound-${item.id}`, newId);
                 newItem = {
-                    ...SoundCard.Default(),
+                    ...CardRegistry.SoundCard.Default(),
                     ...item,
                     id: newId,
                     title: item.name,
@@ -671,7 +687,7 @@ export class SoundboardManager {
                 // Use a composite key: "timer-0"
                 idMap.set(`timer-${oldIdNumeric}`, item.id);
                 newItem = {
-                    ...TimerCard.Default(),
+                    ...CardRegistry.TimerCard.Default(),
                     ...item,
                     type: 'timer',
                     startAction: { command: item.startSound || "", durationMs: 0, triggered: false },
@@ -686,7 +702,7 @@ export class SoundboardManager {
                 const oldIdNumeric = item.id.split('-')[1];
                 // Use a composite key: "notepad-0"
                 idMap.set(`notepad-${oldIdNumeric}`, item.id);
-                newItem = { ...NotepadCard.Default(), ...item, type: 'notepad' };
+                newItem = { ...CardRegistry.NotepadCard.Default(), ...item, type: 'notepad' };
             }
 
             migratedData.push(newItem);

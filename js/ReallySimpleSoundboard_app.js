@@ -1,17 +1,19 @@
-import { SoundboardManager } from './SoundboardManager.js';
-import { SoundboardDB } from './SoundboardDB.js';
+import { SoundboardManager } from './Managers/SoundboardManager.js';
+import { SoundboardDB } from './Core/SoundboardDB.js';
 document.addEventListener('DOMContentLoaded', async () => {
 
     // --- PWA INSTALL HANDLER ---
     /** @type {Event & { prompt: () => Promise<void>, userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }> }} */
     let deferredPrompt; // This variable will save the event
     /** @type {HTMLButtonElement} */
+    //@ts-ignore
     const installButton = document.getElementById('install-pwa-btn');
 
     window.addEventListener('beforeinstallprompt', (e) => {
         // Prevent the mini-infobar from appearing on mobile
         e.preventDefault();
         // Stash the event so it can be triggered later.
+        //@ts-ignore
         deferredPrompt = e;
         // Update UI to notify the user they can install the PWA
         if (installButton) {

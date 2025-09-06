@@ -1,4 +1,4 @@
-import {debounce, slugify, loadGoogleFonts } from './helper-functions.js'
+import {debounce, slugify, loadGoogleFonts } from '../Core/helper-functions.js'
 //@ts-ignore: Object is possibly 'null'.
 
 /**
@@ -51,14 +51,17 @@ export class ThemeManager {
      */
     _attachListeners() {
         this.modal.addEventListener('click', (e) => {
+            //@ts-ignore
             if (e.target.id === 'cosmetics-modal') this.close();
         });
 
         this.openModalButton.addEventListener('click', () => this.open());
 
         this.colorPickers.forEach(input => {
+            //@ts-ignore
             input.addEventListener('input', (e) => this.updateColor(e.target.dataset.cssVar, e.target.value));
         });
+        //@ts-ignore
         this.fontInput.addEventListener('change', (e) => this.updateFont(e.target.value));
 
         // THEME MANAGEMENT
@@ -74,6 +77,7 @@ export class ThemeManager {
 
         document.getElementById('save-theme-btn').addEventListener('click', () => this._handleSaveTheme());
         this.themeList.addEventListener('click', (e) => {
+            //@ts-ignore
             const button = e.target.closest('button');
             if (!button) return;
 
@@ -107,9 +111,12 @@ export class ThemeManager {
     _updateModalInputs() {
         const { colors, fontFamily } = this.cosmeticsData;
         this.colorPickers.forEach(input => {
+            //@ts-ignore
             const cssVar = input.dataset.cssVar;
+            //@ts-ignore
             if (colors[cssVar]) input.value = colors[cssVar];
         });
+        //@ts-ignore
         this.fontInput.value = fontFamily;
     }
 
@@ -128,6 +135,7 @@ export class ThemeManager {
         themeIds.forEach(themeId => {
             const theme = themes[themeId];
             // Create a new copy of the template for each theme
+            //@ts-ignore
             const clone = template.content.cloneNode(true);
 
             // Find the elements inside the cloned template
@@ -191,12 +199,14 @@ export class ThemeManager {
     }
 
     async _handleSaveTheme() {
+        //@ts-ignore
         const themeName = this.saveThemeNameInput.value.trim();
         if (!themeName) {
             alert('Please enter a name for your theme.');
             return;
         }
         await this.saveThemeToLibrary(themeName);
+        //@ts-ignore
         this.saveThemeNameInput.value = '';
         this._renderThemeList();
     }
@@ -499,6 +509,7 @@ export class ThemeManager {
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
+                    //@ts-ignore
                     const uploadedData = JSON.parse(e.target.result);
 
                     // Perform validation to ensure it's a valid library file.
@@ -601,6 +612,7 @@ export class ThemeManager {
             const reader = new FileReader();
             reader.onload = async (e) => {
                 try {
+                    //@ts-ignore
                     const uploadedData = JSON.parse(e.target.result);
                     if (!uploadedData.id || !uploadedData.colors || !uploadedData.fontFamily) {
                         throw new Error("Invalid theme file structure.");

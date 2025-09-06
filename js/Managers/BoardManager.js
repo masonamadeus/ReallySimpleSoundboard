@@ -1,4 +1,4 @@
-import { SoundboardDB } from './SoundboardDB.js';
+import { SoundboardDB } from '../Core/SoundboardDB.js';
 
 export class BoardManager {
     constructor() {

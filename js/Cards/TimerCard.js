@@ -1,6 +1,6 @@
-import { debounce, randomButNot } from "./helper-functions.js";
-import { Card } from "./-Card.js";
-import { MSG } from './MSG.js';
+import { debounce, randomButNot } from "../Core/helper-functions.js";
+import { Card } from "./BaseCard.js";
+import { MSG } from '../Core/MSG.js';
 
 export class TimerCard extends Card {
 

@@ -1,7 +1,7 @@
-import { getAudioDuration, getContrastColor, debounce, randomButNot, lerp } from './helper-functions.js';
-import { AudioPlayer } from './AudioPlayer.js';
-import { Card } from './-Card.js';
-import { MSG } from './MSG.js';
+import { getAudioDuration, getContrastColor, debounce, randomButNot, lerp } from '../Core/helper-functions.js';
+import { AudioPlayer } from '../Core/AudioPlayer.js';
+import { Card } from './BaseCard.js';
+import { MSG } from '../Core/MSG.js';
 
 // SECRET PHRASE: MASHED PERDADERS
 

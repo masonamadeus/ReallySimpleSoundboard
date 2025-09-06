@@ -7,7 +7,7 @@ export const CardRegistry = {
         }
 
         const capitalizedType = type.charAt(0).toUpperCase() + type.slice(1);
-        const path = `./${capitalizedType}Card.js`;
+        const path = `../Cards/${capitalizedType}Card.js`;
 
         try {
             const module = await import(path);

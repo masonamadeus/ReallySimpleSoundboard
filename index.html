@@ -26,6 +26,7 @@
 </head>
 
 <body>
+
     <!-- LE GRID OF CARDS -->
     <div class="container">
         <h1 id="soundboard-title" contenteditable="true">Bug & Moss Really Simple Soundboard</h1>
@@ -33,6 +34,7 @@
         <div id="soundboard-grid" class="soundboard-grid">
         </div>
     </div>
+
 
     <!-- CONFIRM ACTION MODAL -->
     <div id="confirm-modal" class="confirm-modal">
@@ -47,19 +49,29 @@
 
 
     <!-- NOTEPAD CARD TEMPLATE -->
-
     <template id="notepad-card-template">
         <div class="sound-card special-function-card notepad-card">
             <div class="interaction-shield"></div>
-            <div class="notepad-tabs">
-                <button class="add-page-btn">+</button>
+    
+            <div class="notepad-header">
+                
+                <button class="delete-page-btn danger" title="Delete Current Page">X</button>
+                <div class="notepad-page-dropdown">
+                    
+                    <div class="dropdown-selected" title="Double-click to rename">
+                        <span class="selected-title"></span>
+                        <span class="dropdown-arrow">▼</span>
+                    </div>
+                    <div class="dropdown-list">
+                    </div>
+                </div>
             </div>
+    
             <textarea class="notepad-content" placeholder="Type your notes here..."></textarea>
         </div>
     </template>
 
     <!-- TIMER CARD TEMPLATE -->
-
     <template id="timer-card-template">
         <div class="sound-card special-function-card timer-card">
             <div class="interaction-shield"></div>
@@ -127,73 +139,73 @@
         </div>
     </template>
 
+    <!-- SOUND CARD TEMPLATE -->
     <template id="sound-card-template">
-    <div class="sound-card">
-        <div class="interaction-shield"></div>
-        <button class="sound-button" data-action="play">
-            <div class="progress-overlay" style="width: 0%;"></div>
-            <span class="button-text"></span>
-            <div class="settings-triangle-btn" data-action="settings">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path
-                        d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
-                </svg>
+        <div class="sound-card">
+            <div class="interaction-shield"></div>
+            <button class="sound-button" data-action="play">
+                <div class="progress-overlay" style="width: 0%;"></div>
+                <span class="button-text"></span>
+                <div class="settings-triangle-btn" data-action="settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path
+                            d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                    </svg>
+                </div>
+            </button>
+            <div class="sound-controls">
+                <div class="slider-group">
+                    <label>Volume</label>
+                    <input type="range" class="volume-slider" min="0" max="1" step="0.01" value="1.0"
+                        data-action="volume-change">
+                </div>
+                <div class="slider-group">
+                    <label>Speed</label>
+                    <input type="range" class="speed-slider" min="0.5" max="2" step="0.1" value="1.0"
+                        data-action="speed-change">
+                    <span class="speed-display">1.0x</span>
+                </div>
             </div>
-        </button>
-        <div class="sound-controls">
-            <div class="slider-group">
-                <label>Volume</label>
-                <input type="range" class="volume-slider" min="0" max="1" step="0.01" value="1.0"
-                    data-action="volume-change">
-            </div>
-            <div class="slider-group">
-                <label>Speed</label>
-                <input type="range" class="speed-slider" min="0.5" max="2" step="0.1" value="1.0"
-                    data-action="speed-change">
-                <span class="speed-display">1.0x</span>
+    
+            <div class="modal sound-settings-modal">
+                <div class="modal-content">
+                    <div class="modal-section">
+                        <h3>Button Settings</h3>
+                        <div class="title-and-color">
+                            <input type="color" class="button-color-picker" data-key="color">
+                            <input type="text" style="font-size: 1rem;" data-key="title" class="button-name-input">
+                        </div>
+                    </div>
+                    <div class="modal-section">
+                        <div class="modal-checkbox-group">
+                            <label><input type="checkbox" class="shuffle-checkbox" data-key="shuffle"> Random</label>
+                            <label><input type="checkbox" class="autoplay-checkbox" data-key="autoplay">
+                                Autoplay</label>
+                            <label><input type="checkbox" class="priority-checkbox" data-key="priority">
+                                Priority</label>
+                            <label><input type="checkbox" class="loop-checkbox" data-key="loop"> Loop</label>
+                        </div>
+                    </div>
+                    <div class="modal-section">
+                        <h3>Audio Files</h3>
+                        <div class="file-input-container">
+                            <label class="file-input-label">
+                                Add Audio File
+                                <input type="file" class="add-file-input" accept="audio/*" multiple style="display: none;">
+                            </label>
+                        </div>
+                        <ul class="file-list"></ul>
+                        <div class="modal-actions-row">
+                            <button class="delete-soundcard-btn danger">Delete Button</button>
+                            <button class="clear-files-btn highlight-color">Clear All</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
+    </template>
 
-        <div class="modal sound-settings-modal">
-            <div class="modal-content">
-                <div class="modal-section">
-                    <h3>Button Settings</h3>
-                    <div class="title-and-color">
-                        <input type="color" class="button-color-picker" data-key="color">
-                        <input type="text" style="font-size: 1rem;" data-key="title" class="button-name-input">
-                    </div>
-                </div>
-                <div class="modal-section">
-                    <div class="modal-checkbox-group">
-                        <label><input type="checkbox" class="shuffle-checkbox" data-key="shuffle"> Random</label>
-                        <label><input type="checkbox" class="autoplay-checkbox" data-key="autoplay">
-                            Autoplay</label>
-                        <label><input type="checkbox" class="priority-checkbox" data-key="priority">
-                            Priority</label>
-                        <label><input type="checkbox" class="loop-checkbox" data-key="loop"> Loop</label>
-                    </div>
-                </div>
-                <div class="modal-section">
-                    <h3>Audio Files</h3>
-                    <div class="file-input-container">
-                        <label class="file-input-label">
-                            Add Audio File
-                            <input type="file" class="add-file-input" accept="audio/*" multiple
-                                style="display: none;">
-                        </label>
-                    </div>
-                    <ul class="file-list"></ul>
-                    <div class="modal-actions-row">
-                        <button class="delete-soundcard-btn danger">Delete Button</button>
-                        <button class="clear-files-btn highlight-color">Clear All</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</template>
-
-    <!-- CONTROL CARD -->
+    <!-- CONTROL DOCK -->
     <div id="control-dock">
         <button id="add-sound-btn" draggable="true" data-card-type="sound">Add Sound</button>
         <button id="add-timer-btn" draggable="true" data-card-type="timer">Add Timer</button>
@@ -208,9 +220,6 @@
         <button id="download-config-btn">Download</button>
         <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
     </div>
-
- 
-
 
     <!-- STORAGE/DATABASE MANAGER MODAL -->
     <div id="db-manager-modal" class="modal">
@@ -255,7 +264,6 @@
     </div>
 
     <!-- BOARD SWITCHER MODAL -->
-
     <div id="board-switcher-modal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
@@ -278,7 +286,6 @@
     </div>
 
     <!-- COSMETICS MODAL -->
-
     <div id="cosmetics-modal" class="modal">
         <div class="modal-content">
             <div class="modal-section">
@@ -372,7 +379,6 @@
     </template>
 
     <!-- THE HELPFUL BUG -->
-
     <button id="help-bug-btn" title="Help">
         <svg width="100%" height="100%" viewBox="-20 -20 254 270" version="1.1" xmlns="http://www.w3.org/2000/svg"
             xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/"
@@ -608,8 +614,10 @@
 
             </div>
         </div>
+    </div>
 
-        <script type="module" src="js/ReallySimpleSoundboard_app.js"></script>
+    <script type="module" src="js/ReallySimpleSoundboard_app.js"></script>
+
 </body>
 
 </html>

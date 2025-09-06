@@ -2,6 +2,9 @@
 
 SOUNDBOARD OVERALL ================
 - Cache active google font for true offlineness
+- Fix databasemanager modal and make more robust
+- Go through the indexedDB stores and make them modular per card class
+- Organize javascript files into folders
 
 NOTEPAD CARDS =====================
 - Spell check
