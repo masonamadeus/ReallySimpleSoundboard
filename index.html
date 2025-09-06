@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
-    <!-- TO DO :
+<!-- TO DO :
      
         - OBS INTEGRATIONS
         - CACHE GOOGLE FONTS
@@ -22,7 +22,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="css/bmrss.css">
     <title>Soundboard | B&M Really Simple Soundboard</title>
-    
+
 </head>
 
 <body>
@@ -34,7 +34,7 @@
         </div>
     </div>
 
-     <!-- CONFIRM ACTION MODAL -->
+    <!-- CONFIRM ACTION MODAL -->
     <div id="confirm-modal" class="confirm-modal">
         <div class="confirm-modal-content">
             <p id="confirm-modal-message"></p>
@@ -44,10 +44,13 @@
             </div>
         </div>
     </div>
+
+
     <!-- NOTEPAD CARD TEMPLATE -->
 
     <template id="notepad-card-template">
         <div class="sound-card special-function-card notepad-card">
+            <div class="interaction-shield"></div>
             <div class="notepad-tabs">
                 <button class="add-page-btn">+</button>
             </div>
@@ -59,6 +62,7 @@
 
     <template id="timer-card-template">
         <div class="sound-card special-function-card timer-card">
+            <div class="interaction-shield"></div>
             <div class="timer-title" contenteditable="false">New Timer</div>
             <div class="timer-display">
                 <span>00:00</span>
@@ -123,48 +127,29 @@
         </div>
     </template>
 
-    <!-- CONTROL CARD -->
-    <div id="control-card" class="sound-card special-function-card" data-card-type="control" data-card-id="control-card" style="display: none;">
-    <div class="control-card-inner">
-        <div id="control-card-front" class="control-card-face">
-            <button id="add-sound-btn" class="span-two-columns">Add Sound</button>
-            <button id="add-timer-btn">Add Timer</button>
-            <button id="add-notepad-btn">Add Note</button>
-            <button id="rearrange-mode-btn" class="span-two-columns">Rearrange</button>
-            <button id="flip-to-settings-btn" class="secondary-color span-two-columns">Settings</button>
-        </div>
-
-        <div id="control-card-back" class="control-card-face">
-            <button id="upload-config-btn">Upload</button>
-            <button id="download-config-btn">Download</button>
-            <button id="switch-board-btn" class ="accent-color span-two-columns">Switch Board</button>
-            <button id="cosmetics-btn">Cosmetics</button>
-            <button id="db-manager-btn">Storage</button>
-            <button id="flip-to-main-btn"class="span-two-columns secondary-color">Back</button>
-        </div>
-    </div>
-    <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
-</div>
-   
-   <template id="sound-card-template">
+    <template id="sound-card-template">
     <div class="sound-card">
+        <div class="interaction-shield"></div>
         <button class="sound-button" data-action="play">
             <div class="progress-overlay" style="width: 0%;"></div>
             <span class="button-text"></span>
             <div class="settings-triangle-btn" data-action="settings">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                    <path
+                        d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
                 </svg>
             </div>
         </button>
         <div class="sound-controls">
             <div class="slider-group">
                 <label>Volume</label>
-                <input type="range" class="volume-slider" min="0" max="1" step="0.01" value="1.0" data-action="volume-change">
+                <input type="range" class="volume-slider" min="0" max="1" step="0.01" value="1.0"
+                    data-action="volume-change">
             </div>
             <div class="slider-group">
                 <label>Speed</label>
-                <input type="range" class="speed-slider" min="0.5" max="2" step="0.1" value="1.0" data-action="speed-change">
+                <input type="range" class="speed-slider" min="0.5" max="2" step="0.1" value="1.0"
+                    data-action="speed-change">
                 <span class="speed-display">1.0x</span>
             </div>
         </div>
@@ -181,8 +166,10 @@
                 <div class="modal-section">
                     <div class="modal-checkbox-group">
                         <label><input type="checkbox" class="shuffle-checkbox" data-key="shuffle"> Random</label>
-                        <label><input type="checkbox" class="autoplay-checkbox" data-key="autoplay"> Autoplay</label>
-                        <label><input type="checkbox" class="priority-checkbox" data-key="priority"> Priority</label>
+                        <label><input type="checkbox" class="autoplay-checkbox" data-key="autoplay">
+                            Autoplay</label>
+                        <label><input type="checkbox" class="priority-checkbox" data-key="priority">
+                            Priority</label>
                         <label><input type="checkbox" class="loop-checkbox" data-key="loop"> Loop</label>
                     </div>
                 </div>
@@ -190,8 +177,9 @@
                     <h3>Audio Files</h3>
                     <div class="file-input-container">
                         <label class="file-input-label">
-                           Add Audio File
-                           <input type="file" class="add-file-input" accept="audio/*" multiple style="display: none;">
+                            Add Audio File
+                            <input type="file" class="add-file-input" accept="audio/*" multiple
+                                style="display: none;">
                         </label>
                     </div>
                     <ul class="file-list"></ul>
@@ -204,7 +192,24 @@
         </div>
     </div>
 </template>
-    
+
+    <!-- CONTROL CARD -->
+    <div id="control-dock">
+        <button id="add-sound-btn" draggable="true" data-card-type="sound">Add Sound</button>
+        <button id="add-timer-btn" draggable="true" data-card-type="timer">Add Timer</button>
+        <button id="add-notepad-btn" draggable="true" data-card-type="notepad">Add Note</button>
+        <div class="control-divider"></div>
+        <button id="rearrange-mode-btn">Rearrange</button>
+        <button id="switch-board-btn" class="accent-color">Switch Board</button>
+        <button id="cosmetics-btn">Cosmetics</button>
+        <button id="db-manager-btn">Storage</button>
+        <button id="upload-config-btn">Upload</button>
+        <button id="download-config-btn">Download</button>
+        <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
+    </div>
+
+ 
+
 
     <!-- STORAGE/DATABASE MANAGER MODAL -->
     <div id="db-manager-modal" class="modal">
@@ -376,8 +381,8 @@
                     <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#000000" />
                 </filter>
             </defs>
-    
-            
+
+
             <g filter="url(#dropshadow)">
                 <g id="Layer4">
                     <path

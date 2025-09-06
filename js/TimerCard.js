@@ -142,6 +142,7 @@ export class TimerCard extends Card {
         this._attachListeners();
         this.updateUI();
         if (this.data.isRunning){
+            this.updateData({startTime: Date.now()});
             this.tick();
         }
     }
@@ -409,6 +410,8 @@ export class TimerCard extends Card {
             this.updateData({ startAction: newStartActionState });
         }
 
+        MSG.log("Timer Start Action:",0,this.data.startAction)
+        MSG.log("Timer Start Action:",0,this.data.endAction)
         // 3. Start the timer loop
         this.tick();
     }
@@ -441,31 +444,32 @@ export class TimerCard extends Card {
         const remainingMs = this.data.targetDurationMs - currentElapsed;
         const endAction = this.data.endAction;
 
+        // --- End Action Trigger Logic (for pre-firing the sound) ---
+        if (endAction.commandId && !endAction.triggered && remainingMs <= endAction.durationMs) {
+            MSG.log(`Triggering End Action from ${this.data.title}`)
+            this.executeCommand(endAction.commandId, endAction.args);
+            const newEndActionState = { ...endAction, triggered: true };
+            this.updateData({ endAction: newEndActionState });
+        }
 
         if (this.data.mode === 'timer' && remainingMs <= 0) {
-        // If an end action was supposed to fire but hasn't, fire it now as a fallback.
-        if (endAction.commandId && !endAction.triggered) {
-            MSG.log(`Fallback End Action Fired from ${this.data.title}`)
-            this.executeCommand(endAction.commandId, endAction.args);
+            // If an end action was supposed to fire but hasn't, fire it now as a fallback.
+            if (endAction.commandId && !endAction.triggered) {
+                MSG.log(`Fallback End Action Fired from ${this.data.title}`)
+                this.executeCommand(endAction.commandId, endAction.args);
+            }
+
+            if (this.data.isLooping) {
+                this.reset();
+                this.handlePlayPause(); // This will auto-start the next loop
+            } else {
+                this.updateData({ isRunning: false, elapsedMs: this.data.targetDurationMs });
+                this.updateUI();
+            }
+            return; // IMPORTANT: Stop the loop for this frame
         }
 
-        if (this.data.isLooping) {
-            this.reset();
-            this.handlePlayPause(); // This will auto-start the next loop
-        } else {
-            this.updateData({ isRunning: false, elapsedMs: this.data.targetDurationMs });
-            this.updateUI();
-        }
-        return; // IMPORTANT: Stop the loop for this frame
-    }
-
-    // --- End Action Trigger Logic (for pre-firing the sound) ---
-    if (endAction.commandId && !endAction.triggered && remainingMs <= endAction.durationMs) {
-        MSG.log(`Triggering End Action from ${this.data.title}`)
-        this.executeCommand(endAction.commandId, endAction.args);
-        const newEndActionState = { ...endAction, triggered: true };
-        this.updateData({ endAction: newEndActionState });
-    }
+   
 
         this.renderDisplay(currentElapsed);
         this.animationFrameId = requestAnimationFrame(() => this.tick());

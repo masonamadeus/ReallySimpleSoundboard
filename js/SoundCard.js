@@ -252,6 +252,7 @@ export class SoundCard extends Card {
 
     destroy() {
         this.player.destroy();
+        this.closeSettings();
         clearTimeout(this.duckStartTimeout);
         MSG.off(MSG.is.SOUNDCARD_PRIORITY_STARTED, this.boundPriorityPlayHandler);
         MSG.off(MSG.is.SOUNDCARD_PRIORITY_ENDED, this.boundPriorityStopHandler);
