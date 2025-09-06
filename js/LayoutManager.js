@@ -4,18 +4,20 @@
  * Represents a single node in the layout tree. This can be a container or a card.
  */
 export class LayoutNode {
-    /**
-     * @param {string} id - The unique ID of the node.
-     * @param {string} type - The type of node ('grid', 'sound', etc.).
-     * @param {object} [options] - Optional parameters for the node.
-     * @param {{column: number, row: number}} [options.gridSpan={column: 1, row: 1}] - How many grid cells the node should occupy.
-     * @param {LayoutNode[]} [options.children=[]] - An array of child nodes for containers.
-     */
-    constructor(id, type, { gridSpan = { column: 1, row: 1 }, children = [] } = {}) {
+    constructor(
+        id,
+        type, {
+            gridSpan = { column: 1, row: 1 },
+            children = [],
+            gridColumnStart = null, // Add this
+            gridRowStart = null     // Add this
+        } = {}) {
         this.id = id;
         this.type = type;
         this.gridSpan = gridSpan;
         this.children = children;
+        this.gridColumnStart = gridColumnStart; // Add this
+        this.gridRowStart = gridRowStart;       // Add this
     }
 }
 
@@ -132,6 +134,32 @@ export class Layout extends LayoutNode {
         }
         return false;
     }
+
+    /**
+     * Creates a new Layout instance from plain data (e.g., from a database).
+     * @param {object} layoutData The plain object to rehydrate.
+     * @returns {Layout} A new, fully-instantiated Layout object.
+     */
+    static rehydrate(layoutData) {
+        if (!layoutData || !layoutData.children) {
+            return new Layout([]); // Return an empty, valid Layout
+        }
+
+        // A private, recursive helper function
+        const _rehydrateNodeRecursive = (nodeData) => {
+            const children = (nodeData.children || []).map(childData => _rehydrateNodeRecursive(childData));
+            // Update the return statement to include the new properties
+            return new LayoutNode(nodeData.id, nodeData.type, {
+                children: children,
+                gridSpan: nodeData.gridSpan,
+                gridColumnStart: nodeData.gridColumnStart, // Add this
+                gridRowStart: nodeData.gridRowStart      // Add this
+            });
+        };
+
+        const rehydratedChildren = layoutData.children.map(_rehydrateNodeRecursive);
+        return new Layout(rehydratedChildren);
+    }
 }
 
 // #region GRID MANAGER 
@@ -228,6 +256,14 @@ export class GridManager {
         containerElement.style.gridColumn = `span ${node.gridSpan.column}`;
         containerElement.style.gridRow = `span ${node.gridSpan.row}`;
 
+        // If the node has explicit start positions, apply them.
+        if (node.gridColumnStart) {
+            containerElement.style.gridColumnStart = node.gridColumnStart;
+        }
+        if (node.gridRowStart) {
+            containerElement.style.gridRowStart = node.gridRowStart;
+        }
+
         // Render children and append them to this new container
         node.children.forEach(childNode => {
             const childElement = this._renderNodeRecursive(childNode);
@@ -268,51 +304,53 @@ export class GridManager {
         this.gridContainer.addEventListener('dragend', this._handleDragEnd.bind(this));
     }
 
+
+
     //#region DRAG & DROP
     _handleDragStart(e) {
-    const cardElement = e.target.closest('.sound-card');
-    const newCardType = e.target.dataset.cardType;
+        const cardElement = e.target.closest('.sound-card');
+        const newCardType = e.target.dataset.cardType;
 
-    if (this.isRearranging && cardElement) {
-        this.draggedItem = { element: cardElement, id: cardElement.dataset.cardId, type: 'reorder' };
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', this.draggedItem.id);
+        if (this.isRearranging && cardElement) {
+            this.draggedItem = { element: cardElement, id: cardElement.dataset.cardId, type: 'reorder' };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.draggedItem.id);
 
-        // --- NEW: Custom Drag Image Logic ---
-        // 1. Create a clone of the card.
-        const clone = cardElement.cloneNode(true);
-        clone.classList.add('drag-image-custom');
+            // --- NEW: Custom Drag Image Logic ---
+            // 1. Create a clone of the card.
+            const clone = cardElement.cloneNode(true);
+            clone.classList.add('drag-image-custom');
 
-        // 2. Add it to the body but position it off-screen.
-        // It must be in the DOM for the browser to render it.
-        document.body.appendChild(clone);
-        clone.style.position = 'absolute';
-        clone.style.left = '-9999px';
+            // 2. Add it to the body but position it off-screen.
+            // It must be in the DOM for the browser to render it.
+            document.body.appendChild(clone);
+            clone.style.position = 'absolute';
+            clone.style.left = '-9999px';
 
-        // 3. Tell the browser to use our styled clone as the drag image.
-        // e.offsetX/Y uses the mouse's position inside the card as the anchor point.
-        e.dataTransfer.setDragImage(clone, e.offsetX, e.offsetY);
+            // 3. Tell the browser to use our styled clone as the drag image.
+            // e.offsetX/Y uses the mouse's position inside the card as the anchor point.
+            e.dataTransfer.setDragImage(clone, e.offsetX, e.offsetY);
 
-        // 4. Clean up the clone from the DOM immediately after this frame.
-        setTimeout(() => clone.remove(), 0);
-        // --- END NEW ---
+            // 4. Clean up the clone from the DOM immediately after this frame.
+            setTimeout(() => clone.remove(), 0);
+            // --- END NEW ---
 
-        if (this.draggedItem.type === 'reorder') {
-            this.draggedCardOriginalRect = this.draggedItem.element.getBoundingClientRect();
+            if (this.draggedItem.type === 'reorder') {
+                this.draggedCardOriginalRect = this.draggedItem.element.getBoundingClientRect();
+            }
+
+        } else if (newCardType) {
+            this.draggedItem = { element: e.target, id: newCardType, type: 'create' };
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('application/new-card-type', newCardType);
         }
 
-    } else if (newCardType) {
-        this.draggedItem = { element: e.target, id: newCardType, type: 'create' };
-        e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setData('application/new-card-type', newCardType);
+        setTimeout(() => {
+            if (this.draggedItem.element) {
+                this.draggedItem.element.classList.add('dragging');
+            }
+        }, 0);
     }
-    
-    setTimeout(() => {
-        if (this.draggedItem.element) {
-            this.draggedItem.element.classList.add('dragging');
-        }
-    }, 0);
-}
 
     _handleDragOver(e) {
         e.preventDefault();

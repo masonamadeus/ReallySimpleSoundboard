@@ -150,8 +150,7 @@ export class SoundboardManager {
         let currentLayout;
         if (savedLayoutData && savedLayoutData.layout && savedLayoutData.layout.children) {
             // "Rehydrate" the plain layout object from the DB into our Layout classes
-            const children = savedLayoutData.layout.children.map(node => new LayoutNode(node.id, node.type, node.children || []));
-            currentLayout = new Layout(children);
+            currentLayout = Layout.rehydrate(savedLayoutData.layout);
         } else {
             // If no layout is saved, create a default one from the existing cards
             const children = allCardData.map(cd => new LayoutNode(cd.id, cd.type));
