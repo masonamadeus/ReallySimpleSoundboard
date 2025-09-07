@@ -3,15 +3,10 @@ import { AudioPlayer } from '../Core/AudioPlayer.js';
 import { Card } from './BaseCard.js';
 import { MSG } from '../Core/MSG.js';
 
-// SECRET PHRASE: MASHED PERDADERS
-
 /**
  * Represents a single sound card (sound button) component in the soundboard grid.
  * It SHOULD manage its own UI, state, and audio playback.
  */
-
-// NEED TO MOVE DUCKING FUNCTIONALITY IN HERE FROM SOUNDBOARDMANAGER AND MAKE THAT EVENT-DRIVEN
-
 export class SoundCard extends Card {
 
     static Default() {
@@ -36,6 +31,7 @@ export class SoundCard extends Card {
     get templateId() {
         return 'sound-card-template';
     }
+    //#region Lifecycle
 
     constructor(cardData, soundboardManager, dbInstance) {
         super(cardData, soundboardManager, dbInstance)
@@ -78,6 +74,17 @@ export class SoundCard extends Card {
         this.settings = {};
 
         this._initialize();
+    }
+
+    getSettingsConfig() {
+        return {
+            title: { label: 'Button Title', type: 'text' },
+            color: { label: 'Button Color', type: 'color' },
+            shuffle: { label: 'Random', type: 'checkbox' },
+            autoplay: { label: 'Autoplay', type: 'checkbox' },
+            priority: { label: 'Priority', type: 'checkbox' },
+            loop: { label: 'Loop', type: 'checkbox' }
+        };
     }
 
 
@@ -149,33 +156,10 @@ export class SoundCard extends Card {
         */
     }
 
-    getFileInfo(index) {
-        const file = this.data.files[index];
-        if (!file) {
-            return new Card.Ticket(); // Return a default ticket if file not found
-        }
-        // Creates a standardized ticket with the file's duration and no specific args needed.
-        return new Card.Ticket({
-            durationMs: file.durationMs || 0,
-            args: {
-                specificIndex: index
-            }
-        });
-    }
 
-    getNextPlaybackInfo() {
-        const nextIndex = this._determineNextFileIndex();
-
-        if (nextIndex === null) return new Card.Ticket({
-            durationMs: 0,
-            args: {
-                specificIndex: null
-            }
-        });
-
-        return this.getFileInfo(nextIndex)
-    }
-
+    //#endregion
+    
+    //#region Event Listeners
     _attachListeners() {
         MSG.on(MSG.is.SOUNDCARD_PRIORITY_STARTED, this.boundPriorityPlayHandler);
         MSG.on(MSG.is.SOUNDCARD_PRIORITY_ENDED, this.boundPriorityStopHandler);
@@ -230,6 +214,23 @@ export class SoundCard extends Card {
         });
     }
 
+    //#endregion
+    
+    getNextPlaybackInfo() {
+        const nextIndex = this._determineNextFileIndex();
+
+        if (nextIndex === null) return new Card.Ticket({
+            durationMs: 0,
+            args: {
+                specificIndex: null
+            }
+        });
+
+        return this.getFileInfo(nextIndex)
+    }
+
+    
+
     updateUI() {
 
         // Set button text and color
@@ -262,6 +263,21 @@ export class SoundCard extends Card {
 
 
     // #region DEALING WITH FILES/DATA
+
+    getFileInfo(index) {
+        const file = this.data.files[index];
+        if (!file) {
+            return new Card.Ticket(); // Return a default ticket if file not found
+        }
+        // Creates a standardized ticket with the file's duration and no specific args needed.
+        return new Card.Ticket({
+            durationMs: file.durationMs || 0,
+            args: {
+                specificIndex: index
+            }
+        });
+    }
+
 
     async _processFile(fileData) {
         if (typeof fileData.durationMs === 'number' && fileData.durationMs >= 0) {
@@ -463,7 +479,7 @@ export class SoundCard extends Card {
 
     //#endregion
     // ==========================================================================================================
-    // #region SETTINGS MODAL METHODS
+    // #region SETTINGS MODAL
     // ==================================
 
     openSettings() {

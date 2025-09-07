@@ -51,7 +51,6 @@
     <!-- NOTEPAD CARD TEMPLATE -->
     <template id="notepad-card-template">
         <div class="sound-card special-function-card notepad-card">
-            <div class="interaction-shield"></div>
     
             <div class="notepad-header">
                 
@@ -67,14 +66,14 @@
                 </div>
             </div>
     
-            <textarea class="notepad-content" placeholder="Type your notes here..."></textarea>
+            <textarea class="notepad-content" placeholder="Double click the title to edit it..."></textarea>
+            <div class="resize-handle"></div>
         </div>
     </template>
 
     <!-- TIMER CARD TEMPLATE -->
     <template id="timer-card-template">
         <div class="sound-card special-function-card timer-card">
-            <div class="interaction-shield"></div>
             <div class="timer-title" contenteditable="false">New Timer</div>
             <div class="timer-display">
                 <span>00:00</span>
@@ -142,7 +141,6 @@
     <!-- SOUND CARD TEMPLATE -->
     <template id="sound-card-template">
         <div class="sound-card">
-            <div class="interaction-shield"></div>
             <button class="sound-button" data-action="play">
                 <div class="progress-overlay" style="width: 0%;"></div>
                 <span class="button-text"></span>
@@ -207,18 +205,27 @@
 
     <!-- CONTROL DOCK -->
     <div id="control-dock">
-        <button id="add-sound-btn" draggable="true" data-card-type="sound">Add Sound</button>
-        <button id="add-timer-btn" draggable="true" data-card-type="timer">Add Timer</button>
-        <button id="add-notepad-btn" draggable="true" data-card-type="notepad">Add Note</button>
-        <div class="control-divider"></div>
-        <button id="rearrange-mode-btn">Rearrange</button>
-        <button id="switch-board-btn" class="accent-color">Switch Board</button>
-        <button id="cosmetics-btn">Cosmetics</button>
-        <div class="control-divider"></div>
-        <button id="db-manager-btn">Storage</button>
-        <button id="upload-config-btn">Upload</button>
-        <button id="download-config-btn">Download</button>
-        <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
+        <div id="add-card-dock" class="control-dock-card left">
+            <h4 class="dock-card-title">Add Card</h4>
+            <div class="dock-card-content">
+            </div>
+        </div>
+        <div id="layout-board-dock" class="control-dock-card middle">
+            <h4 class="dock-card-title">Layout & Boards</h4>
+            <div class="dock-card-content">
+                <button id="rearrange-mode-btn">Rearrange</button>
+                <button id="switch-board-btn" class="accent-color">Switch Board</button>
+            </div>
+        </div>
+        <div id="settings-data-dock" class="control-dock-card right">
+            <h4 class="dock-card-title">Settings & Data</h4>
+            <div class="dock-card-content">
+                <button id="cosmetics-btn">Cosmetics</button>
+                <button id="db-manager-btn">Storage</button>
+                <button id="upload-config-btn">Upload</button>
+                <button id="download-config-btn">Download</button>
+            </div>
+        </div>
     </div>
 
     <!-- STORAGE/DATABASE MANAGER MODAL -->

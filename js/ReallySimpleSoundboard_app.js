@@ -1,5 +1,16 @@
 import { SoundboardManager } from './Managers/SoundboardManager.js';
 import { SoundboardDB } from './Core/SoundboardDB.js';
+import { CardRegistry } from './Core/CardRegistry.js';
+import { ThemeManager } from './Managers/ThemeManager.js';
+import { GridManager } from './Managers/LayoutManager.js';
+import { ControlDockManager } from './Managers/ControlDockManager.js';
+import { BoardManager } from './Managers/BoardManager.js';
+
+// EVENTUALLY NEED TO MAKE IT SO THERE DO NOT NEED TO BE EXPLICIT REFS TO IMPORT CARD TYPES
+import { SoundCard } from './Cards/SoundCard.js';
+import { TimerCard } from './Cards/TimerCard.js';
+import { NotepadCard } from './Cards/NotepadCard.js';
+
 document.addEventListener('DOMContentLoaded', async () => {
 
     // --- PWA INSTALL HANDLER ---
@@ -45,10 +56,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('PWA was installed');
     });
 
+    // 1. Create dependencies
     const db = new SoundboardDB();
-    await db.openDB(); // Wait for the database to be ready and migrated
-    
-    // Now pass the opened database instance to the manager
-    const app = new SoundboardManager(db);
-    app.initialize();
+    await db.openDB();
+
+    const cardRegistry = new CardRegistry();
+    // EVENTUALLY NEED TO MAKE IT SO THERE DO NOT NEED TO BE EXPLICIT REFS TO IMPORT CARD TYPES
+    cardRegistry.register('sound', SoundCard);
+    cardRegistry.register('timer', TimerCard);
+    cardRegistry.register('notepad', NotepadCard);
+
+    // 2. Instantiate all managers
+    const soundboardManager = new SoundboardManager(db);
+    const themeManager = new ThemeManager(soundboardManager); // Pass manager for modals
+    const gridManager = new GridManager(soundboardManager);
+    const controlDockManager = new ControlDockManager(soundboardManager);
+    const boardManager = new BoardManager(soundboardManager);
+
+    // 3. Initialize in a controlled order
+    await themeManager.init(db, new SoundboardDB('default'));
+    await boardManager.init(document.getElementById('board-switcher-modal'), document.getElementById('board-list'));
+    await gridManager.init(document.getElementById('soundboard-grid'), document.getElementById('control-dock'), soundboardManager.allCards);
+    await soundboardManager.init({ themeManager, gridManager, controlDockManager, boardManager, cardRegistry });
+
+    // 4. Initialize the Control Dock LAST
+    controlDockManager.init(document.getElementById('control-dock'), document.querySelectorAll('.control-dock-card'), cardRegistry);
 });
+

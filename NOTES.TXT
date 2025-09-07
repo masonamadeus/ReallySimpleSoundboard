@@ -2,7 +2,7 @@
 
 SOUNDBOARD OVERALL ================
 - Cache active google font for true offlineness
-- Fix databasemanager modal and make more robust
+- Fix databasemanager modal and make more robust MODAL classes
 - Go through the indexedDB stores and make them modular per card class
 - Organize javascript files into folders
 

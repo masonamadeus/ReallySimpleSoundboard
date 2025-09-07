@@ -8,6 +8,8 @@ export class EventManager {
             // Soundcard-level actions
             SOUNDCARD_PRIORITY_STARTED: 'SoundCard:PriorityStarted',
             SOUNDCARD_PRIORITY_ENDED: 'SoundCard:PriorityEnded',
+
+            REARRANGE_MODE_CHANGED: 'GridManager:RearrangeModeChanged',
         };
 
         this.debugLevel = 0; // -1 is nothing, 0 is all

@@ -1,5 +1,5 @@
 import { MSG } from '../Core/MSG.js';
-
+import { Modal } from '../Core/Modal.js'
 //#region TICKET CLASS
 class Ticket {
     /**
@@ -37,26 +37,24 @@ export class Card {
     
     /**
      * The constructor for all card types.
-     * @param {object} cardData The initial data for the card from the database.
-     * @param {import('../Managers/SoundboardManager.js').SoundboardManager} soundboardManagerAPI A reference to the main manager.
-     * @param {import('../Core/SoundboardDB.js').SoundboardDB} dbInstance A reference to the database.
+     * @param cardData The initial data for the card from the database.
+     * @param soundboardManagerAPI A reference to the main manager.
+     * @param dbInstance A reference to the database.
      */
     constructor(cardData, soundboardManagerAPI, dbInstance) {
-        //@ts-ignore yes it does exist
+        //@ts-ignore This class is only ever extended, we can guarantee there's always a constructor.
         const defaultData = this.constructor.Default();
         this.data = { ...defaultData, ...cardData };
-
         this.manager = soundboardManagerAPI;
         this.db = dbInstance;
         this.id = this.data.id;
+
         this.cardElement = this._createElement();
 
+        // INIT COMMAND LOGIC
         this.commands = []; // THIS card's commands
         this.allCommands = []; // Everyone ELSE'S commands.
-
-        // 1. initialize commands
         this._rebuildCommands();
-
 
     }
 
@@ -112,6 +110,30 @@ export class Card {
      * Placeholder for cleanup logic (e.g., stopping timers or audio).
      */
     destroy() {
+    }
+
+    //#endregion
+
+    //#region Settings Modal
+
+    getSettingsConfig() {
+        // Return null or an empty object if a card has no settings
+        return null;
+    }
+
+    // Add this generic helper method to open the modal
+    _openSettingsModal() {
+        const config = this.getSettingsConfig();
+        if (!config) return;
+
+        // The Modal takes the title, the config object, the current data, and a save callback
+        const modal = new Modal(
+            `${this.data.title} Settings`,
+            config,
+            this.data,
+            (newData) => this.updateData(newData) // Pass the updateData method as the callback
+        );
+        modal.open();
     }
 
     //#endregion
@@ -254,14 +276,14 @@ export class Card {
 
         cardElement.dataset.cardId = this.data.id;
         cardElement.dataset.cardType = this.data.type;
-        cardElement.setAttribute('draggable', this.manager.getRearrangeMode);
+        cardElement.setAttribute('draggable', this.manager.isRearrangeMode());
 
         return cardElement;
     } 
 
     // Helper method to handle card deletion
     async _handleDeleteCard() {
-        const confirmed = await this.manager.showConfirmModal("Are you sure you want to permanently remove this button?");
+        const confirmed = await this.manager.showConfirmModal("Are you sure you want to permanently remove this card?");
         if (confirmed) {
             this.destroy();
             this.manager.removeCard(this.data.id);

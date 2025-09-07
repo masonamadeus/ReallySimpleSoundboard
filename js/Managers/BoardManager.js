@@ -1,15 +1,19 @@
 import { SoundboardDB } from '../Core/SoundboardDB.js';
 
 export class BoardManager {
-    constructor() {
-        this.modal = document.getElementById('board-switcher-modal');
-        this.boardListElement = document.getElementById('board-list');
+    constructor(soundboardManager) {
+        this.manager = soundboardManager;
+        this.modal = null;
+        this.boardListElement = null;
+    }
+
+    init(modal, boardListElement){
+        this.modal = modal;
+        this.boardListElement = boardListElement;
         this._attachListeners();
     }
 
     _attachListeners() {
-        document.getElementById('switch-board-btn').addEventListener('click', () => this.open());
-
         this.modal.addEventListener('click', (event) => {
             //@ts-ignore
             if (event.target.id === 'board-switcher-modal') {

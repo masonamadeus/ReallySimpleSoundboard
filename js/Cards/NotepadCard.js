@@ -5,9 +5,8 @@ export class NotepadCard extends Card {
     static Default() {
         return {
             type: 'notepad',
-            pages: [{ title: 'New Note', content: '' }],
-            currentPageIndex: 0,
-            height: '200px'
+            pages: [{ title: 'New Notepad', content: '' }],
+            currentPageIndex: 0
         };
     }
 
@@ -39,7 +38,6 @@ export class NotepadCard extends Card {
     _attachListeners() {
         // --- Event listeners for the main card content ---
         this.contentElement.addEventListener('input', () => this.saveContent());
-        this.contentElement.addEventListener('mouseup', () => this.saveHeight());
         this.deletePageButton.addEventListener('click', () => this.deletePage());
 
         // --- Event listeners for the custom dropdown ---
@@ -50,6 +48,7 @@ export class NotepadCard extends Card {
         
         this.selectedTitle.addEventListener('blur', () => this.finishRename());
         this.selectedTitle.addEventListener('keydown', (e) => {
+            //@ts-ignore
             if (e.key === 'Enter') {
                 e.preventDefault();
                 this.finishRename();
@@ -59,9 +58,12 @@ export class NotepadCard extends Card {
         // Use event delegation for the list of pages
         this.dropdownList.addEventListener('click', (e) => {
             const target = e.target;
+            //@ts-ignore
             if (target.classList.contains('page-option')) {
+                //@ts-ignore
                 const newIndex = parseInt(target.dataset.pageIndex, 10);
                 this.switchPage(newIndex);
+                //@ts-ignore
             } else if (target.classList.contains('add-page-option')) {
                 this.addPage();
             }
@@ -70,6 +72,7 @@ export class NotepadCard extends Card {
 
         // Close dropdown if user clicks outside of it
         document.addEventListener('click', (e) => {
+            //@ts-ignore
             if (!this.dropdown.contains(e.target)) {
                 this.dropdown.classList.remove('open');
             }
@@ -78,14 +81,9 @@ export class NotepadCard extends Card {
     
     // --- Data Management Methods ---
     saveContent() {
+        //@ts-ignore
         this.data.pages[this.data.currentPageIndex].content = this.contentElement.value;
         this.updateData({ pages: this.data.pages });
-    }
-
-    saveHeight() {
-        if (this.contentElement.style.height) {
-            this.updateData({ height: this.contentElement.style.height });
-        }
     }
 
     addPage() {
@@ -96,13 +94,17 @@ export class NotepadCard extends Card {
 
     startRename() {
         this.dropdown.classList.remove('open');
+        //@ts-ignore
         this.selectedTitle.contentEditable = 'true';
+        //@ts-ignore
         this.selectedTitle.focus();
         document.execCommand('selectAll', false, null); // Select all text
     }
 
     finishRename() {
+        //@ts-ignore
         if (this.selectedTitle.isContentEditable) {
+            //@ts-ignore
             this.selectedTitle.contentEditable = 'false';
             const newTitle = this.selectedTitle.textContent.trim();
             if (newTitle && newTitle !== this.title) {
@@ -146,8 +148,8 @@ export class NotepadCard extends Card {
         const currentPage = this.data.pages[this.data.currentPageIndex];
         
         this.selectedTitle.textContent = currentPage.title;
+        //@ts-ignore
         this.contentElement.value = currentPage.content;
-        this.contentElement.style.height = this.data.height || '';
 
         // --- Re-render the custom dropdown list ---
         this.dropdownList.innerHTML = ''; // Clear existing

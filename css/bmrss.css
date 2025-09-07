@@ -134,6 +134,13 @@ body {
     min-height: 100px; /* To make empty containers droppable */
 }
 
+.span-two-columns {
+    grid-column: span 2;
+}
+
+.span-three-columns {
+    grid-column: span 3;
+}
 
 /* =================================================================== */
 /* BUTTONS & GENERAL CONTROLS
@@ -159,6 +166,8 @@ button {
     background-color: transparent;
     cursor: pointer;
 }
+
+
 
 
 .title-and-color {
@@ -226,7 +235,7 @@ input[type="range"]::-moz-range-thumb {
     padding: 10px;
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
     gap: 1.5rem;
-    padding-bottom: 5rem;
+    padding-bottom: 10rem;
 }
 
 .sound-card {
@@ -243,6 +252,7 @@ input[type="range"]::-moz-range-thumb {
     box-sizing: border-box;
     position:relative;
     user-select: none;
+    min-height: 150px;
 }
 
 .sound-card.swap-target {
@@ -251,16 +261,6 @@ input[type="range"]::-moz-range-thumb {
     transform: scale(1.03); /* Make it pop slightly */
 }
 
-
-.interaction-shield {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 10;      /* High z-index to cover card content */
-    display: none;    /* Hidden by default */
-}
 
 /* When rearrange mode is active, show the shield on all cards
       EXCEPT for the control card. */
@@ -316,6 +316,59 @@ input[type="range"]::-moz-range-thumb {
 .soundboard-grid.rearrange-mode .sound-card.drag-over {
     border: 2px dashed var(--highlight-color);
     transform: scale(1.05);
+}
+
+.resize-handle {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    width: 20px;
+    height: 20px;
+    cursor: nwse-resize;
+    background-color: var(--highlight-color);
+    border-top-left-radius: 8px;
+    opacity: 0; /* Hidden by default */
+    transition: opacity 0.2s ease-in-out;
+    z-index: 100;
+}
+
+/* Show the handle only when rearranging */
+.soundboard-grid.rearrange-mode .resize-handle {
+    opacity: 1;
+}
+
+.delete-card-in-rearrange-btn {
+    /* This rule now only needs to handle styling and positioning */
+    position: absolute;
+    top: -10px;
+    left: -10px;
+    width: 30px;
+    height: 30px;
+    background-color: #d9534f;
+    color: white;
+    border: 2px solid white;
+    border-radius: 50%;
+    font-size: 1.5rem;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    z-index: 12;
+}
+
+.interaction-shield {
+    /* This shield is only present in rearrange mode, so no other context is needed */
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    cursor: grab;
+}
+
+/* Show the button only when rearrange mode is active on the grid */
+.soundboard-grid.rearrange-mode .sound-card .delete-card-in-rearrange-btn {
+    display: block;
 }
 
 /* =================================================================== */
@@ -386,48 +439,105 @@ input[type="range"]::-moz-range-thumb {
 }
 
 /* =================================================================== */
-/* CONTROL CARD
+/* CONTROL DOCK
 /* =================================================================== */
+
 #control-dock {
+    --dock-peek-amount: 80px;
+    --dock-hover-raise: 10px;
+
     position: fixed;
     bottom: 0;
     left: 0;
     width: 100%;
-    padding: 0.75rem;
-    background-color: var(--panel-color);
-    color: var(--panel-color-text);
     display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 1rem;
-    box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.15);
-    flex-wrap: wrap;
-    z-index: 500;
-    box-sizing: border-box;
-}
-
-#control-dock button {
-    padding: 0.5rem 1rem; /* Adjust padding for smaller dock buttons */
-}
-
-.control-divider {
-    width: 2px;
-    height: 25px;
-    background-color: var(--secondary-color);
-}
-
-#control-card-actions {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    justify-content: center; /* Groups the cards in the middle */
+    align-items: flex-end;
     gap: 0.5rem;
+    padding: 0 0.5rem; /* Reduced padding for mobile */
+    z-index: 500;
+    pointer-events: none;
 }
 
-.span-two-columns {
-    grid-column: span 2;
+.control-dock-card {
+    /* This is the key change:
+       flex: 1 tells each card to take up an equal share of the available space.
+       min-width: 0 is a flexbox trick that allows the cards to shrink
+       below their content's natural width, which is crucial on mobile. */
+    flex: 1;
+    min-width: 0;
+    max-width: 300px; /* Still useful to prevent them from getting huge */
+
+    background-color: var(--secondary-color);
+    color: var(--secondary-color-text);
+    padding: 0.5rem 1rem; /* Reduced horizontal padding */
+    cursor: pointer;
+    transition: transform 0.3s ease-in-out;
+    box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.25);
+    pointer-events: all;
+    min-height: 100px;
 }
 
-.span-three-columns {
-    grid-column: span 3;
+.dock-card-title {
+    margin: 0;
+    text-align: center;
+    user-select: none;
+    padding-top: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid var(--primary-color);
+
+    /* This makes the font size responsive to the screen width,
+       but it won't go smaller than 1rem or larger than 1.5rem. */
+    font-size: clamp(1rem, 4vw, 1.5rem);
+}
+
+.control-dock-card.left {
+    transform: translateY(calc(100% - var(--dock-peek-amount))) rotate(-5deg);
+}
+
+.control-dock-card.right {
+    transform: translateY(calc(100% - var(--dock-peek-amount))) rotate(5deg);
+}
+
+.control-dock-card.middle {
+    transform: translateY(calc(100% - var(--dock-peek-amount)));
+}
+
+.control-dock-card:hover {
+    transform: translateY(calc(100% - var(--dock-peek-amount) - var(--dock-hover-raise))) rotate(0);
+}
+
+.control-dock-card.open {
+    transform: translateY(0) rotate(0deg) !important;
+    cursor: default;
+}
+
+.control-dock-card.closing {
+    transform: translateY(100%) rotate(0deg) !important;
+}
+
+.dock-card-content {
+    margin-top: 1rem;
+    display: none;
+}
+
+.dock-card-content button {
+    margin:4px;
+}
+#add-card-dock.open .dock-card-content {
+    display: grid;
+    /* Create as many 120px columns as will fit, and let them grow to fill space */
+    grid-template-columns: 100%;
+    gap: 1rem;
+    max-height: 40vh;
+    overflow-y: auto;
+    overflow-x:hidden;
+    padding: 0.5rem;
+}
+
+.control-dock-card.open .dock-card-content {
+    display: flex;
+    flex-direction: column;
 }
 
 /* General button style within the control card */
@@ -449,6 +559,38 @@ input[type="range"]::-moz-range-thumb {
 #switch-board-btn {
     background-color: var(--primary-color) !important;
     color: var(--primary-color-text) !important;
+}
+
+.card-sticker {
+    /* REMOVED: transform: scale(...) */
+    cursor: grab;
+    transition: box-shadow 0.2s ease-in-out; /* Changed from transform */
+
+    /* Force the sticker to conform to the grid cell */
+    width: 100%;
+    height: 100%;
+    padding: 0.5rem;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+.card-sticker:hover {
+    /* REMOVED: transform: scale(...) */
+    box-shadow: 0 0 10px var(--highlight-color); /* Add a glow instead of scaling */
+}
+
+.sticker-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem; /* Space between sticker and label */
+}
+
+.sticker-label {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: var(--panel-color-text);
+    z-index: 5;
 }
 
 /* =================================================================== */
@@ -599,6 +741,13 @@ timer-display span {
     color: var(--highlight-color-text);
 }
 
+.timer-buttons .timer-settings-btn {
+    flex-grow: 0; /* Don't allow it to grow */
+    min-width: 50px;
+    background-color: var(--secondary-color);
+    color: var(--secondary-color-text);
+}
+
 .remove-timer-btn {
     width: 100%;
     margin-top: 1rem;
@@ -616,6 +765,22 @@ timer-display span {
 /* =================================================================== */
 .notepad-card {
     align-self: stretch;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.notepad-content {
+    flex-grow: 1;
+    width: 100%;
+    border: none;
+    background-color: var(--secondary-color);
+    padding: 0.5rem;
+    font-size: 1rem;
+    color: var(--secondary-color-text);
+    resize: none;
+    box-sizing: border-box;
+    font-family: var(--font-family-primary);
 }
 
 .notepad-header {
@@ -626,6 +791,14 @@ timer-display span {
     gap: 0.5rem;
     padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--secondary-color);
+}
+
+.notepad-header > .delete-page-btn {
+    padding: 0.5rem;
+    font-size: 1rem;
+    min-width: 40px;
+    flex-shrink: 0;
+    border-radius: 4px;
 }
 
 /* Custom Dropdown Styling */
@@ -692,27 +865,7 @@ timer-display span {
 }
 /* --- End Custom Dropdown --- */
 
-.notepad-header > .delete-page-btn {
-    padding: 0.5rem;
-    font-size: 1rem;
-    min-width: 40px;
-    flex-shrink: 0;
-    border-radius: 4px;
-}
 
-.notepad-content {
-    flex-grow: 1;
-    width: 100%;
-    border: none;
-    background-color: var(--secondary-color);
-    padding: 0.5rem;
-    font-size: 1rem;
-    color: var(--secondary-color-text);
-    resize: vertical;
-    box-sizing: border-box;
-    min-height: 150px;
-    font-family: var(--font-family-primary);
-}
 
 /*  =================================================================== */
 /* MODALS
@@ -958,8 +1111,8 @@ timer-display span {
 /* =================================================================== */
 #help-bug-btn {
     position: fixed;
-    bottom: 1rem;
-    left: 1rem;
+    top: 1rem;
+    right: 1rem;
     z-index: 1000;
     min-width: 30px;
     min-height: 30px;

@@ -34,6 +34,8 @@ export class TimerCard extends Card {
         return 'timer-card-template';
     }
 
+    //#region Constructor
+
     constructor(cardData, soundboardManager, dbInstance) {
         super(cardData, soundboardManager, dbInstance);
 
@@ -120,6 +122,7 @@ export class TimerCard extends Card {
 
         // BOUND EVENT HANDLER - why?? I forget??
         this.boundHandleButtonDeletion = this.handleButtonDeletion.bind(this);
+
 
         this._initialize();
     }
@@ -409,9 +412,6 @@ export class TimerCard extends Card {
             const newStartActionState = { ...startAction, triggered: true };
             this.updateData({ startAction: newStartActionState });
         }
-
-        MSG.log("Timer Start Action:",0,this.data.startAction)
-        MSG.log("Timer Start Action:",0,this.data.endAction)
         // 3. Start the timer loop
         this.tick();
     }

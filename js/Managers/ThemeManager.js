@@ -10,10 +10,9 @@ export class ThemeManager {
     static COSMETICS_KEY = 'cosmetics-config';
     static THEME_LIBRARY_KEY = 'theme-library';
 
-    constructor(db, defaultDb, soundboardManager) {
+    constructor(soundboardManager) {
         // Core dependencies
-        this.db = db;
-        this.defaultDb = defaultDb;
+        
         this.soundboardManager = soundboardManager; // For confirm modals
 
         // Data state
@@ -21,6 +20,28 @@ export class ThemeManager {
         this.debouncedSave = debounce(() => this.saveCurrentCosmetics(), 300);
 
         // UI Element References
+
+    }
+
+    /**
+     * Initializes the manager by loading the current board's cosmetics.
+     */
+    async init(currentDB, defaultDB) {
+
+        this.db = currentDB;
+        this.defaultDb = defaultDB;
+
+        await Promise.all([
+            this.db.openDB(),
+            this.defaultDb.openDB()
+        ]);
+        await this.loadCurrentCosmetics();
+
+        this._getDOMLemons();
+        this._attachListeners();
+    }
+
+    _getDOMLemons(){
         this.openModalButton = document.getElementById('cosmetics-btn');
         this.modal = document.getElementById('cosmetics-modal');
         this.fontInput = document.getElementById('font-input');
@@ -29,20 +50,6 @@ export class ThemeManager {
         this.themeList = document.getElementById('theme-library-list');
         this.uploadThemeInput = document.getElementById('upload-theme-input');
         this.uploadThemeLibraryInput = document.getElementById('upload-themelibrary-input');
-
-        // This single call sets up all modal interactivity.
-        this._attachListeners();
-    }
-
-    /**
-     * Initializes the manager by loading the current board's cosmetics.
-     */
-    async init() {
-        await Promise.all([
-            this.db.openDB(),
-            this.defaultDb.openDB()
-        ]);
-        await this.loadCurrentCosmetics();
     }
 
     /**

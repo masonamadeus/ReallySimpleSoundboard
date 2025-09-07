@@ -165,19 +165,22 @@ export class Layout extends LayoutNode {
 // #region GRID MANAGER
 
 export class GridManager {
-    constructor(managerAPI, gridContainer, controlDock, allCardsMap) {
-
+    constructor(managerAPI) {
         this.managerAPI = managerAPI;
-        this.gridContainer = gridContainer;
-        this.controlDock = controlDock;
-        this.allCardsMap = allCardsMap;
-
         this.isRearranging = false;
-        this.layout = new Layout(); // It still needs a layout property to render from
-
+        this.layout = new Layout();
         this.draggedItem = { element: null, type: null, id: null };
         this.placeholder = this._createPlaceholder();
+        this.gridContainer = null;
+        this.controlDock = null;
+        this.allCards = null;
 
+    }
+
+    init(gridContainer, controlDock, allCards) {
+        this.gridContainer = gridContainer;
+        this.controlDock = controlDock;
+        this.allCards = allCards;
         this._attachEventListeners();
     }
 
@@ -203,7 +206,7 @@ export class GridManager {
 
     _renderNodeRecursive(node) {
         if (node.type !== 'grid') {
-            const cardInstance = this.allCardsMap.get(node.id);
+            const cardInstance = this.allCards.get(node.id);
             if (cardInstance) {
                 const cardElement = cardInstance.cardElement;
                 cardElement.setAttribute('draggable', this.isRearranging);
@@ -231,8 +234,32 @@ export class GridManager {
     setRearrangeMode(isEnabled) {
         this.isRearranging = isEnabled;
         this.gridContainer.classList.toggle('rearrange-mode', isEnabled);
-        this.allCardsMap.forEach(card => {
+
+        this.allCards.forEach(card => {
             card.cardElement.setAttribute('draggable', isEnabled);
+
+            if (isEnabled) {
+                // --- Create and add the UI elements ---
+
+                // Add Delete Button
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-card-in-rearrange-btn';
+                deleteBtn.innerHTML = '&times;'; // The 'X' symbol
+                card.cardElement.appendChild(deleteBtn);
+
+                // Add Interaction Shield
+                const shield = document.createElement('div');
+                shield.className = 'interaction-shield';
+                card.cardElement.appendChild(shield);
+
+            } else {
+                // --- Find and remove the UI elements ---
+                const deleteBtn = card.cardElement.querySelector('.delete-card-in-rearrange-btn');
+                if (deleteBtn) deleteBtn.remove();
+
+                const shield = card.cardElement.querySelector('.interaction-shield');
+                if (shield) shield.remove();
+            }
         });
     }
 
@@ -242,49 +269,57 @@ export class GridManager {
         this.gridContainer.addEventListener('dragover', this._handleDragOver.bind(this));
         this.gridContainer.addEventListener('drop', this._handleDrop.bind(this));
         this.gridContainer.addEventListener('dragend', this._handleDragEnd.bind(this));
+
+        //resize
+        this.gridContainer.addEventListener('mousedown', this._onGridMouseDown.bind(this));
     }
 
     //#region DRAG & DROP
     _handleDragStart(e) {
-    const cardElement = e.target.closest('.sound-card');
-    const newCardType = e.target.dataset.cardType;
+        // Use more specific selectors to determine the drag source
+        const stickerElement = e.target.closest('.sticker-container .sound-card');
+        const cardElement = e.target.closest('#soundboard-grid .sound-card');
 
-    if (this.isRearranging && cardElement) {
-        this.draggedItem = { element: cardElement, id: cardElement.dataset.cardId, type: 'reorder' };
-        e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', this.draggedItem.id);
+        // Case 1: Dragging a NEW card sticker from the dock
+        if (stickerElement) {
+            const newCardType = stickerElement.dataset.cardType;
+            this.draggedItem = { element: stickerElement, id: newCardType, type: 'create' };
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('application/new-card-type', newCardType);
 
-        // --- Custom Drag Image Logic (Centered) ---
-        const clone = cardElement.cloneNode(true);
-        clone.classList.add('drag-image-custom');
-        document.body.appendChild(clone);
-        clone.style.position = 'absolute';
-        clone.style.left = '-9999px';
-        
-        // Use the clone's dimensions to center the cursor
-        e.dataTransfer.setDragImage(clone, clone.offsetWidth / 2, clone.offsetHeight / 2);
-        
-        // The clone is no longer needed after this frame
-        setTimeout(() => clone.remove(), 0);
+            // --- THE FIX ---
+            // Explicitly reset the placeholder to the default 1x1 size for a new card.
+            this.placeholder.style.gridColumn = 'span 1';
+            this.placeholder.style.gridRow = 'span 1';
 
-        // --- Live Reflow and Jump Prevention ---
-        // Use a timeout to modify the DOM *after* the drag image has been created
-        setTimeout(() => {
-            // 1. Insert the placeholder where the card was. This holds the
-            //    original spot open and prevents the other cards from jumping.
-            cardElement.parentNode.insertBefore(this.placeholder, cardElement);
+            // Case 2: Dragging an EXISTING card on the board to reorder it
+        } else if (this.isRearranging && cardElement) {
+            this.draggedItem = { element: cardElement, id: cardElement.dataset.cardId, type: 'reorder' };
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', this.draggedItem.id);
 
-            // 2. Hide the original card to allow the placeholder to move
-            //    freely and to create the live reflow effect.
-            cardElement.classList.add('grid-item-dragging');
-        }, 0);
+            // (Your custom drag image logic can remain here)
+            const clone = cardElement.cloneNode(true);
+            clone.classList.add('drag-image-custom');
+            document.body.appendChild(clone);
+            clone.style.position = 'absolute';
+            clone.style.left = '-9999px';
+            e.dataTransfer.setDragImage(clone, clone.offsetWidth / 2, clone.offsetHeight / 2);
+            setTimeout(() => clone.remove(), 0);
 
-    } else if (newCardType) {
-        this.draggedItem = { element: e.target, id: newCardType, type: 'create' };
-        e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setData('application/new-card-type', newCardType);
+            // Defer DOM manipulation to avoid glitches
+            setTimeout(() => {
+                const node = this.managerAPI.getLayout().findNode(this.draggedItem.id);
+                if (node) {
+                    // This part is correct: use the existing card's size for the placeholder
+                    this.placeholder.style.gridColumn = `span ${node.gridSpan.column}`;
+                    this.placeholder.style.gridRow = `span ${node.gridSpan.row}`;
+                }
+                cardElement.parentNode.insertBefore(this.placeholder, cardElement);
+                cardElement.classList.add('grid-item-dragging');
+            }, 0);
+        }
     }
-}
 
     _handleDragOver(e) {
         e.preventDefault();
@@ -335,6 +370,64 @@ export class GridManager {
     }
 
     //#endregion
+
+    //#region RESIZING
+
+    _onGridMouseDown(e) {
+        // We only care if the user clicked on a resize handle
+        if (!e.target.classList.contains('resize-handle')) return;
+
+        e.preventDefault(); // Prevent text selection, etc.
+
+        const cardElement = e.target.closest('.sound-card');
+        const cardId = cardElement.dataset.cardId;
+        const layout = this.managerAPI.getLayout();
+        const node = layout.findNode(cardId);
+
+        if (!cardElement || !node) return;
+
+        const grid = this.gridContainer;
+        const gridStyle = getComputedStyle(grid);
+        const colCount = gridStyle.gridTemplateColumns.split(' ').length;
+        const colGap = parseFloat(gridStyle.columnGap) || 0;
+        const gridColumnWidth = (grid.getBoundingClientRect().width - (colGap * (colCount - 1))) / colCount;
+
+        // --- START: Dynamic Row Height Calculation ---
+        const firstGridItem = grid.firstElementChild;
+        // If a card exists in the grid, use its height. Otherwise, use a safe default.
+        const gridRowHeight = firstGridItem ? firstGridItem.offsetHeight : 80;
+        // --- END: Dynamic Row Height Calculation ---
+
+        const startPos = { x: e.clientX, y: e.clientY };
+        const startSpan = { ...node.gridSpan };
+
+        const onResizeMove = (moveEvent) => {
+            const dx = moveEvent.clientX - startPos.x;
+            const dy = moveEvent.clientY - startPos.y;
+
+            const dCol = Math.round(dx / gridColumnWidth);
+            const dRow = Math.round(dy / gridRowHeight);
+
+            // Update the node data in the layout object directly
+            node.gridSpan.column = Math.max(1, startSpan.column + dCol);
+            node.gridSpan.row = Math.max(1, startSpan.row + dRow);
+
+            // Trigger a full re-render for live feedback.
+            // This is clean because it uses the single source of truth.
+            this.render(layout);
+        };
+
+        const onResizeEnd = () => {
+            document.removeEventListener('mousemove', onResizeMove);
+            document.removeEventListener('mouseup', onResizeEnd);
+            // The interaction is over. Tell the manager to save the final layout state.
+            this.managerAPI.saveLayout(layout);
+        };
+
+        document.addEventListener('mousemove', onResizeMove);
+        document.addEventListener('mouseup', onResizeEnd, { once: true });
+    }
+
 }
 // #endregion
 

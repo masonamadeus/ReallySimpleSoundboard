@@ -1,16 +1,18 @@
-import { AudioPlayer } from '../Core/AudioPlayer.js';
 import { Card } from '../Cards/BaseCard.js';
+import { MSG } from '../Core/MSG.js';
 import { SoundboardDB } from '../Core/SoundboardDB.js';
+import { GridManager, Layout, LayoutNode } from './LayoutManager.js';
 import { BoardManager } from './BoardManager.js';
 import { ThemeManager } from './ThemeManager.js';
+import { CardRegistry } from '../Core/CardRegistry.js';
+import { ControlDockManager } from './ControlDockManager.js';
 import {
     getAudioDuration, arrayBufferToBase64, base64ToArrayBuffer,
     loadGoogleFonts, slugify, formatIdAsTitle, formatBytes,
     debounce
 } from '../Core/helper-functions.js';
-import { MSG } from '../Core/MSG.js';
-import { GridManager, Layout, LayoutNode } from './LayoutManager.js';
-import { CardRegistry } from '../Core/CardRegistry.js';
+
+
 
 
 // ====================================================================
@@ -24,19 +26,12 @@ export class SoundboardManager {
     //#region Constructor
     constructor(dbInstance) {
         this.db = dbInstance;
-        this.soundboardGrid = document.getElementById('soundboard-grid');
-        this.controlDock = document.getElementById('control-dock');
-
-        this.allCards = new Map(); // Stores all card instances, keyed by their unique ID.
-        this.allCardCommands = new Map(); // Stores all card commands, keyed by the card ID
-
-        
-
-        this.GRID_LAYOUT_KEY = 'grid-layout';
-
+        this.allCards = new Map();
+        this.allCardCommands = new Map();
         this.migrationQueue = [];
         this.isMigrating = false;
-        
+        this.GRID_LAYOUT_KEY = 'grid-layout';
+
         this.managerAPI = {
             getCardById: this.getCardById.bind(this),
             showConfirmModal: this.showConfirmModal.bind(this),
@@ -47,40 +42,55 @@ export class SoundboardManager {
             registerCardCommands: this.registerCardCommands.bind(this),
             handleCardCommand: this.handleCardCommand.bind(this),
             handleCardMigration: this.handleCardMigration.bind(this),
-            isRearrangeMode: this.getRearrangeMode.bind(this)
+            isRearrangeMode: this.getRearrangeMode.bind(this),
+            getLayout: this.getLayout.bind(this)
         };
-
-        this.gridManager = new GridManager(
-            this.managerAPI,
-            this.soundboardGrid,
-            this.controlDock,
-            this.allCards,
-        );
-
-        this.themeManager = new ThemeManager(this.db, new SoundboardDB('default'), this.managerAPI);
-        this.boardManager = new BoardManager();
         
     }
 
     //#endregion
 
     // #region Lifecycle
-    async initialize() {
-        loadGoogleFonts(['Wellfleet']);
-        await this.db.openDB();
+    async init({ themeManager, gridManager, controlDockManager, boardManager, cardRegistry }) {
+        // 1. Assign dependencies
+        this.themeManager = themeManager;
+        this.gridManager = gridManager;
+        this.controlDock = controlDockManager;
+        this.boardManager = boardManager;
+        this.cardRegistry = cardRegistry;
 
-        // I SUSPECT THIS SHOULD MOVE TO BOARDMANAGER - we need to rethink boardmanager more
+        // 2. Get DOM elements
+        this._getDOMLemons();
+
+        // 3. Load board-specific data
         const urlParams = new URLSearchParams(window.location.search);
         const boardId = urlParams.get('board') || 'default';
         await BoardManager.addBoardId(boardId);
-        await this._loadBoardData();
 
+        await this._loadBoardData();
         this.attachGlobalEventListeners();
+
+        // 4. Initialize the GridManager now that cards are loaded
+        this.gridManager.init(
+            this.elements.soundboardGrid,
+            this.elements.controlDock,
+            this.allCards
+        );
+    }
+    
+
+    _getDOMLemons(){
+        this.elements = {
+            soundboardGrid: document.getElementById('soundboard-grid'),
+            controlDock: document.getElementById('control-dock'),
+            controlDockCards: document.querySelectorAll('.control-dock-card'),
+            boardSwitcherModal: document.getElementById('board-switcher-modal'),
+            boardList: document.getElementById('board-list')
+        }
     }
 
     async _loadBoardData() {
         await this.loadTitle();
-        await this.themeManager.init();
         await this.initBugMovement();
         await this.loadCardsAndLayout();
         await this.broadcastAllCommands();
@@ -89,7 +99,7 @@ export class SoundboardManager {
 
     // #region Card Management
     async addCard(type, parentId = 'root', index = -1) { // Add parentId and default it to 'root'
-        const CardClass = await CardRegistry.get(type);
+        const CardClass = await this.cardRegistry.get(type);
         if (!CardClass) return;
 
         const newCardInstance = Card.create(CardClass, this.managerAPI, this.db);
@@ -155,7 +165,7 @@ export class SoundboardManager {
 
         // First, create all card instances from the data
         await Promise.all(allCardData.map(async (cardData) => {
-            const CardClass = await CardRegistry.get(cardData.type);
+            const CardClass = await this.cardRegistry.get(cardData.type);
             if (CardClass) {
                 const cardInstance = new CardClass(cardData, this.managerAPI, this.db);
                 this.allCards.set(cardInstance.id, cardInstance);
@@ -180,12 +190,17 @@ export class SoundboardManager {
     // #endregion
 
     // #region Layout
+    getLayout(){
+        return this.gridManager.layout;
+    }
+
+
     toggleRearrangeMode() {
         const isEnabled = !this.gridManager.isRearranging;
         this.gridManager.setRearrangeMode(isEnabled);
-        
-        const btn = document.getElementById('rearrange-mode-btn');
-        btn.textContent = isEnabled ? 'Done Rearranging' : 'Rearrange';
+
+        // This now delegates the UI update to the appropriate manager
+        this.controlDock.updateRearrangeButton(isEnabled);
     }
 
     /**
@@ -529,22 +544,7 @@ export class SoundboardManager {
             this.db.save('soundboard-title', { id: 'soundboard-title', title: newTitle });
         });
 
-        // CONTROL CARD LISTENERS
-        document.getElementById('add-sound-btn').addEventListener('click', () => {
-            this.addCard('sound');
-        });
-        document.getElementById('add-notepad-btn').addEventListener('click', () => {
-            this.addCard('notepad');
-        });
-        document.getElementById('add-timer-btn').addEventListener('click', () => {
-            this.addCard('timer');
-        });
-        document.getElementById('rearrange-mode-btn').addEventListener('click', () => this.toggleRearrangeMode());
-        document.getElementById('download-config-btn').addEventListener('click', () => this.downloadConfig());
-        document.getElementById('upload-config-btn').addEventListener('click', () => document.getElementById('upload-config-input').click());
-        document.getElementById('upload-config-input').addEventListener('change', (e) => this.uploadConfig(e));
-        document.getElementById('db-manager-btn').addEventListener('click', () => this.showDbManagerModal());
-        document.getElementById('create-new-board-btn').addEventListener('click', () => this.createNewBoard());
+        
 
         // listener to close the board switcher modal when clicking the background
         document.getElementById('board-switcher-modal').addEventListener('click', (event) => {
@@ -554,10 +554,12 @@ export class SoundboardManager {
             }
         });
 
+        // CLOSE DB MANAGER MODAL WHEN CLICKING BACKGROUND
         document.getElementById('db-manager-modal').addEventListener('click', (event) => {
             //@ts-ignore
             if (event.target.id === 'db-manager-modal') this.closeDbManagerModal();
         });
+
         document.getElementById('persistent-storage-checkbox').addEventListener('change', (e) => {
             //@ts-ignore
             if (e.target.checked) {
