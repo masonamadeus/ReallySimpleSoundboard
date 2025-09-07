@@ -443,8 +443,8 @@ input[type="range"]::-moz-range-thumb {
 /* =================================================================== */
 
 #control-dock {
-    --dock-peek-amount: 80px;
-    --dock-hover-raise: 10px;
+    --dock-peek-amount: 20%;
+    --dock-hover-raise: 30%;
 
     position: fixed;
     bottom: 0;
