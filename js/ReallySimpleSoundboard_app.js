@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('PWA was installed');
     });
 
-    // 1. Create dependencies
+    // Create dependencies
     const db = new SoundboardDB();
     await db.openDB();
 
@@ -66,20 +66,29 @@ document.addEventListener('DOMContentLoaded', async () => {
     cardRegistry.register('timer', TimerCard);
     cardRegistry.register('notepad', NotepadCard);
 
-    // 2. Instantiate all managers
+    // 1. Instantiate all managers, passing the API to UI managers
     const soundboardManager = new SoundboardManager(db);
-    const themeManager = new ThemeManager(soundboardManager); // Pass manager for modals
-    const gridManager = new GridManager(soundboardManager);
-    const controlDockManager = new ControlDockManager(soundboardManager);
-    const boardManager = new BoardManager(soundboardManager);
+    const themeManager = new ThemeManager(soundboardManager.managerAPI);
+    const gridManager = new GridManager(soundboardManager.managerAPI);
+    const controlDockManager = new ControlDockManager(soundboardManager.managerAPI);
+    const boardManager = new BoardManager(soundboardManager.managerAPI);
 
-    // 3. Initialize in a controlled order
+    // 2. Set the SoundboardManager's dependencies so it knows about the UI managers
+    soundboardManager.setDependencies({
+        themeManager,
+        gridManager,
+        controlDockManager,
+        boardManager,
+        cardRegistry
+    });
+
+    // 3. Initialize all UI managers so they are ready to listen for events
     await themeManager.init(db, new SoundboardDB('default'));
     await boardManager.init(document.getElementById('board-switcher-modal'), document.getElementById('board-list'));
-    await gridManager.init(document.getElementById('soundboard-grid'), document.getElementById('control-dock'), soundboardManager.allCards);
-    await soundboardManager.init({ themeManager, gridManager, controlDockManager, boardManager, cardRegistry });
+    await gridManager.init(document.getElementById('soundboard-grid'), document.getElementById('control-dock'));
+    await controlDockManager.init(document.getElementById('control-dock'), document.querySelectorAll('.control-dock-card'), cardRegistry);
 
-    // 4. Initialize the Control Dock LAST
-    controlDockManager.init(document.getElementById('control-dock'), document.querySelectorAll('.control-dock-card'), cardRegistry);
+    // 4. NOW, load the data. The UI managers are ready to catch the events.
+    await soundboardManager.load();
 });
 

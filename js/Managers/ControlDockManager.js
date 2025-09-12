@@ -1,3 +1,4 @@
+import { MSG } from '../Core/MSG.js';
 export class ControlDockManager {
     /**
      * Manages the new three-card control dock at the bottom of the screen.
@@ -36,6 +37,11 @@ export class ControlDockManager {
     }
 
     _attachListeners() {
+
+        MSG.on(MSG.EVENTS.REARRANGE_MODE_CHANGED, (isEnabled) => {
+            this.elements.rearrangeBtn.textContent = isEnabled ? 'Done' : 'Rearrange';
+        });
+
         const addCardDock = document.getElementById('add-card-dock');
 
         // Auto-close the dock when dragging a sticker from it
@@ -89,6 +95,8 @@ export class ControlDockManager {
                 event.preventDefault(); // Stop the page from scrolling up
             }
         }, {passive: false});
+
+
     }
 
     async _populateAddCardDock() {
@@ -102,7 +110,7 @@ export class ControlDockManager {
                 const container = document.createElement('div');
                 container.className = 'sticker-container';
 
-                const tempCard = new CardClass(CardClass.Default(), this.manager.managerAPI, null);
+                const tempCard = new CardClass(CardClass.Default(), this.manager, null);
                 const stickerElement = tempCard.cardElement;
 
                 // --- (All stickerElement modifications remain the same) ---
@@ -146,16 +154,6 @@ export class ControlDockManager {
 
         if (this.openCard === cardElement) {
             this.openCard = null;
-        }
-    }
-
-    /**
-     * Updates the text of the rearrange button based on the mode.
-     * @param {boolean} isRearranging - The current state of rearrange mode.
-     */
-    updateRearrangeButton(isRearranging) {
-        if (this.elements.rearrangeBtn) {
-            this.elements.rearrangeBtn.textContent = isRearranging ? 'Done' : 'Rearrange';
         }
     }
 }

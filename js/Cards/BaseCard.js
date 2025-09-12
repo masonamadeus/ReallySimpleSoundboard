@@ -247,17 +247,16 @@ export class Card {
     }
 
     async updateData(newData) {
+        // Prevent empty requests
         if (Object.keys(newData).length === 0) {
             return;
         }
 
-        const oldTitle = this.data.title;
-        this.data = { ...this.data, ...newData };
-        await this.db.save(this.data.id, this.data);
-
-        if (this.data.title !== oldTitle){
-            this._rebuildCommands();
-        }
+        // Fire an event with the necessary information for the manager to process
+        MSG.say(MSG.ACTIONS.REQUEST_UPDATE_CARD_DATA, {
+            cardId: this.id,
+            newData: newData
+        });
     }
     
     
@@ -276,7 +275,7 @@ export class Card {
 
         cardElement.dataset.cardId = this.data.id;
         cardElement.dataset.cardType = this.data.type;
-        cardElement.setAttribute('draggable', this.manager.isRearrangeMode());
+        cardElement.setAttribute('draggable', this.manager.isRearranging());
 
         return cardElement;
     } 
@@ -285,8 +284,7 @@ export class Card {
     async _handleDeleteCard() {
         const confirmed = await this.manager.showConfirmModal("Are you sure you want to permanently remove this card?");
         if (confirmed) {
-            this.destroy();
-            this.manager.removeCard(this.data.id);
+            MSG.say(MSG.ACTIONS.REQUEST_REMOVE_CARD, {cardId: this.data.id})
         }
     }
 

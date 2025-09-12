@@ -1,68 +1,97 @@
 export class EventManager {
     constructor() {
-        this.is = {
-            // Soundboard-level actions
-            SOUNDBOARD_REFRESH_CARDS: 'Soundboard:RefreshCards',
-            SOUNDBOARD_DELETED_CARD: 'Soundboard:DeletedCard',
+        this.listeners = {};
 
-            // Soundcard-level actions
-            SOUNDCARD_PRIORITY_STARTED: 'SoundCard:PriorityStarted',
-            SOUNDCARD_PRIORITY_ENDED: 'SoundCard:PriorityEnded',
+        // ====================================================================
+        // Central Event Contract
+        // All component communication MUST use one of the following events.
+        // ====================================================================
 
-            REARRANGE_MODE_CHANGED: 'GridManager:RearrangeModeChanged',
+        this.EVENTS = {
+            // Fired AFTER the central state has been updated.
+            // UI Managers listen for these to re-render themselves.
+            STATE_CHANGED: 'state:changed',
+            LAYOUT_CHANGED: 'layout:changed',
+            CARDS_CHANGED: 'cards:changed', // For when card data itself changes
+            REARRANGE_MODE_CHANGED: 'rearrange:changed', // for toggling rearrange mode
+            SOUNDBOARD_DELETED_CARD: 'soundboard:deletedCard', // Legacy, but useful
+
+            // Sound-specific events
+            SOUNDCARD_PRIORITY_STARTED: 'soundcard:priorityStarted',
+            SOUNDCARD_PRIORITY_ENDED: 'soundcard:priorityEnded',
         };
+
+        this.ACTIONS = {
+            // Fired FROM components to request a state change.
+            // The SoundboardManager listens for these.
+            REQUEST_ADD_CARD: 'request:addCard',
+            REQUEST_REMOVE_CARD: 'request:removeCard',
+            REQUEST_MOVE_CARD: 'request:moveCard',
+            REQUEST_RESIZE_CARD: 'request:resizeCard',
+            REQUEST_UPDATE_CARD_DATA: 'request:updateCardData',
+        };
+
+
+        // For backwards compatibility and ease of access
+        this.is = { ...this.EVENTS, ...this.ACTIONS };
 
         this.debugLevel = 0; // -1 is nothing, 0 is all
     }
 
-    // Subscribe to an event
+    /**
+     * Subscribe to an event.
+     * @param {string} eventName The name of the event to listen for.
+     * @param {Function} listener The callback function to execute.
+     */
     on(eventName, listener) {
-        if (!this.is[eventName]) {
-            this.is[eventName] = [];
+        if (!this.listeners[eventName]) {
+            this.listeners[eventName] = [];
         }
-        this.is[eventName].push(listener);
+        this.listeners[eventName].push(listener);
     }
 
-    // Unsubscribe from an event
+    /**
+     * Unsubscribe from an event.
+     * @param {string} eventName The name of the event.
+     * @param {Function} listenerToRemove The specific listener to remove.
+     */
     off(eventName, listenerToRemove) {
-        if (!this.is[eventName]) return;
+        if (!this.listeners[eventName]) return;
 
-        this.is[eventName] = this.is[eventName].filter(
+        this.listeners[eventName] = this.listeners[eventName].filter(
             listener => listener !== listenerToRemove
         );
     }
 
-    // Dispatch an event
+    /**
+     * Dispatch an event to all subscribers.
+     * @param {string} eventName The name of the event to dispatch.
+     * @param {any} [data] Optional data to pass to the listeners.
+     */
     say(eventName, data) {
-        if (!this.is[eventName]) return;
+        if (!this.listeners[eventName]) return;
 
-        this.is[eventName].forEach(listener => listener(data));
+        this.log(`Event Fired: ${eventName}`, 1, data);
+        this.listeners[eventName].forEach(listener => listener(data));
     }
 
-    setDebug(lvl){
+    setDebug(lvl) {
         console.log(
             `DEBUG LEVEL CHANGED FROM ${this.debugLevel} TO ${lvl}`);
-            
+
         this.debugLevel = parseInt(lvl)
     }
 
     log(string, lvl = 0, obj = null) {
-    const formattedString = typeof string === 'string' ? string : JSON.stringify(string);
-    if (this.debugLevel <= lvl) {
-      console.log(`
-        DEBUG LEVEL: ${this.debugLevel}\n
-        LEVEL ${lvl} MESSAGE: ${formattedString}
-      `);
-
-      if (obj !== null) {
-        if (typeof obj === 'object') {
-          console.log('OBJECT:', JSON.stringify(obj, null, 2));
-        } else {
-          console.log('Object parameter provided, but not an object:', obj);
+        const formattedString = typeof string === 'string' ? string : JSON.stringify(string);
+        if (this.debugLevel === lvl || this.debugLevel === 0) {
+            console.groupCollapsed(`DEBUG LVL ${lvl}: ${formattedString}`);
+            if (obj !== null) {
+                console.log('DATA:', obj);
+            }
+            console.groupEnd();
         }
-      }
     }
-  }
 }
 
 export const MSG = new EventManager();

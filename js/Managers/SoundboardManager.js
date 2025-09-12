@@ -31,19 +31,24 @@ export class SoundboardManager {
         this.migrationQueue = [];
         this.isMigrating = false;
         this.GRID_LAYOUT_KEY = 'grid-layout';
+        this.layout = new Layout();
+        this.isRearranging = false;
 
         this.managerAPI = {
             getCardById: this.getCardById.bind(this),
+            getAllCards: () => this.allCards,
             showConfirmModal: this.showConfirmModal.bind(this),
-            addCard: this.addCard.bind(this),
-            moveCard: this.moveCard.bind(this),
-            removeCard: this.removeCard.bind(this),
-            saveLayout: this.saveLayout.bind(this),
             registerCardCommands: this.registerCardCommands.bind(this),
             handleCardCommand: this.handleCardCommand.bind(this),
             handleCardMigration: this.handleCardMigration.bind(this),
-            isRearrangeMode: this.getRearrangeMode.bind(this),
-            getLayout: this.getLayout.bind(this)
+            toggleRearrangeMode: this.toggleRearrangeMode.bind(this),
+            downloadConfig: this.downloadConfig.bind(this),
+            uploadConfig: () => document.getElementById('upload-config-input').click(),
+            openThemeManager: () => this.themeManager.open(),
+            openDbManager: () => this.showDbManagerModal(),
+            openBoardManager: () => this.boardManager.open(),
+            isRearranging: this.getRearrangeMode.bind(this),
+            getLayout: () => this.layout,
         };
         
     }
@@ -51,31 +56,26 @@ export class SoundboardManager {
     //#endregion
 
     // #region Lifecycle
-    async init({ themeManager, gridManager, controlDockManager, boardManager, cardRegistry }) {
-        // 1. Assign dependencies
+
+    setDependencies({ themeManager, gridManager, controlDockManager, boardManager, cardRegistry }) {
         this.themeManager = themeManager;
         this.gridManager = gridManager;
         this.controlDock = controlDockManager;
         this.boardManager = boardManager;
         this.cardRegistry = cardRegistry;
+    }
 
-        // 2. Get DOM elements
+    // This new method handles all data loading and setup.
+    async load() {
         this._getDOMLemons();
+        this._attachManagerListeners();
 
-        // 3. Load board-specific data
         const urlParams = new URLSearchParams(window.location.search);
         const boardId = urlParams.get('board') || 'default';
         await BoardManager.addBoardId(boardId);
 
         await this._loadBoardData();
-        this.attachGlobalEventListeners();
-
-        // 4. Initialize the GridManager now that cards are loaded
-        this.gridManager.init(
-            this.elements.soundboardGrid,
-            this.elements.controlDock,
-            this.allCards
-        );
+        this._attachGlobalEventListeners();
     }
     
 
@@ -98,6 +98,8 @@ export class SoundboardManager {
     // #endregion
 
     // #region Card Management
+
+    // ADD CARD
     async addCard(type, parentId = 'root', index = -1) { // Add parentId and default it to 'root'
         const CardClass = await this.cardRegistry.get(type);
         if (!CardClass) return;
@@ -108,23 +110,39 @@ export class SoundboardManager {
 
         const newNode = new LayoutNode(newCardInstance.id, newCardInstance.data.type);
 
-        const parentNode = this.gridManager.layout.findNode(parentId) || this.gridManager.layout;
+        const parentNode = this.layout.findNode(parentId) || this.layout;
         const insertIndex = index === -1 ? parentNode.children.length : index;
         
         // Use the new, more specific insertNode call
-        this.gridManager.layout.insertNode(newNode, parentId, insertIndex);
+        this.layout.insertNode(newNode, parentId, insertIndex);
 
-        await this.saveLayout(this.gridManager.layout);
+        await this.saveLayout(this.layout);
+        MSG.say(MSG.EVENTS.LAYOUT_CHANGED)
     }
 
+    // MOVE CARD
     async moveCard(cardId, newParentId, newIndex) {
-    const { node } = this.gridManager.layout.findNodeAndParent(cardId);
-    if (node) {
-        this.gridManager.layout.removeNode(cardId);
-        this.gridManager.layout.insertNode(node, newParentId, newIndex);
-        await this.saveLayout(this.gridManager.layout);
+        const { node } = this.layout.findNodeAndParent(cardId);
+        if (node) {
+            this.layout.removeNode(cardId);
+            this.layout.insertNode(node, newParentId, newIndex);
+
+            await this.saveLayout(this.layout);
+            MSG.say(MSG.EVENTS.LAYOUT_CHANGED);
+        }
     }
-}
+
+    /** RESIZE A CARD */
+    async resizeCard(cardId, newGridSpan) {
+        const node = this.layout.findNode(cardId);
+        if (node) {
+            node.gridSpan = newGridSpan;
+
+            await this.saveLayout(this.layout);
+            MSG.say(MSG.EVENTS.LAYOUT_CHANGED);
+        }
+    }
+
 
     /**
     * Safely removes a card from the application by its unique ID.
@@ -138,6 +156,7 @@ export class SoundboardManager {
         if (typeof cardInstance.destroy === 'function') {
             cardInstance.destroy();
         }
+
         this.unregisterCardCommands(cardInstance.id);
 
         // Remove from state and DB
@@ -145,10 +164,36 @@ export class SoundboardManager {
         await this.db.delete(cardIdToRemove);
 
         // Tell the GridManager to remove the node from its layout
-        this.gridManager.layout.removeNode(cardIdToRemove);
+        this.layout.removeNode(cardIdToRemove);
         
-        // Save the updated layout, which also re-renders the grid
-        await this.saveLayout(this.gridManager.layout);
+        // Save the updated layout
+        await this.saveLayout(this.layout);
+
+        // Update the layout
+        MSG.say(MSG.EVENTS.LAYOUT_CHANGED)
+    }
+
+    async updateCardData(cardId, newData) {
+        const cardInstance = this.allCards.get(cardId);
+        if (!cardInstance) return;
+
+        const oldTitle = cardInstance.data.title;
+
+        // 1. Update the in-memory state
+        cardInstance.data = { ...cardInstance.data, ...newData };
+
+        // 2. Save the updated data to the database
+        await this.db.save(cardInstance.id, cardInstance.data);
+
+        // 3. If the title changed, the card's command names need to be rebroadcast
+        if (newData.title && newData.title !== oldTitle) {
+            // This is a great example of centralizing logic. The card doesn't
+            // need to know about commands; it just reports a data change.
+            cardInstance._rebuildCommands();
+        }
+
+        // 4. Tell the specific card instance to update its UI
+        cardInstance.updateUI();
     }
 
     getCardById(id) {
@@ -182,39 +227,34 @@ export class SoundboardManager {
             currentLayout = new Layout(children);
             await this.saveLayout(currentLayout); // Save the newly generated layout
         }
+
+        this.layout = currentLayout;
         
-        // Finally, delegate the rendering task to the GridManager
-        this.gridManager.render(currentLayout);
+        // Finally, delegate the rendering task to the GridManager via event
+        MSG.say(MSG.EVENTS.LAYOUT_CHANGED)
     }
 
     // #endregion
 
     // #region Layout
     getLayout(){
-        return this.gridManager.layout;
+        return this.layout;
     }
 
 
     toggleRearrangeMode() {
-        const isEnabled = !this.gridManager.isRearranging;
-        this.gridManager.setRearrangeMode(isEnabled);
-
-        // This now delegates the UI update to the appropriate manager
-        this.controlDock.updateRearrangeButton(isEnabled);
+        this.isRearranging = !this.isRearranging;
+        // Broadcast the change to all listeners
+        MSG.say(MSG.EVENTS.REARRANGE_MODE_CHANGED, this.isRearranging);
     }
-
     /**
-     * Saves the current layout state to the database and triggers a re-render.
-     * This method is used as the callback for GridManager.
-     * @param {Layout} layout The new layout object from the GridManager.
+     * Saves the current layout state to the database
+     * @param {Layout} layout The new layout object
      */
     async saveLayout(layout) {
         // Convert class instances to plain objects for DB storage
         const serializableLayout = JSON.parse(JSON.stringify(layout));
         await this.db.save(this.GRID_LAYOUT_KEY, { id: this.GRID_LAYOUT_KEY, layout: serializableLayout });
-        
-        // Tell the GridManager to render the final, saved state to ensure UI consistency
-        this.gridManager.render(layout);
     }
     // #endregion
 
@@ -534,7 +574,28 @@ export class SoundboardManager {
     // #endregion
 
     // #region Event Listeners
-    attachGlobalEventListeners() {
+
+    // MANAGER LISTENERS
+    _attachManagerListeners() {
+        // Listen for a card's request to be removed
+        MSG.on(MSG.ACTIONS.REQUEST_REMOVE_CARD, (data) => this.removeCard(data.cardId));
+
+        // Listen for a request to add a new card
+        MSG.on(MSG.ACTIONS.REQUEST_ADD_CARD, (data) => this.addCard(data.type, data.targetParentId, data.index));
+
+        // Listen for requests to update a card's data
+        MSG.on(MSG.ACTIONS.REQUEST_UPDATE_CARD_DATA, (data) => this.updateCardData(data.cardId, data.newData));
+
+        // Listen for requests to move a card
+        MSG.on(MSG.ACTIONS.REQUEST_MOVE_CARD, (data) => this.moveCard(data.cardId, data.newParentId, data.newIndex));
+
+        // Liten for requests to resize a card
+        MSG.on(MSG.ACTIONS.REQUEST_RESIZE_CARD, (data) => this.resizeCard(data.cardId, data.newGridSpan));
+
+    }
+
+    // GLOBAL EVENT LISTENERS
+    _attachGlobalEventListeners() {
 
         // SOUNDBOARD TITLE
         document.getElementById('soundboard-title').addEventListener('blur', (e) => {
