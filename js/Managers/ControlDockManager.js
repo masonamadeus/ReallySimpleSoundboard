@@ -54,13 +54,14 @@ export class ControlDockManager {
         this.cards.forEach(card => {
             card.addEventListener('click', (e) => {
                 if (e.target.closest('button')) {
-                    return;
+                    this.closeCard(card); // Close the card when a button is clicked
+                    return; // And stop further processing
                 }
 
-                if (this.openCard === card) {
+                if (this.openCard === card) { // if we're clicking the open card, close it
                     this.closeCard(card); // Use the new closeCard method
                 } else {
-                    if (this.openCard) {
+                    if (this.openCard) { // If another card is open, close it first
                         this.closeCard(this.openCard); // Use the new closeCard method
                     }
                     card.classList.remove('closing'); // Ensure it's not in a closing state
@@ -74,10 +75,10 @@ export class ControlDockManager {
         // --- Relocated Button Listeners ---
         this.elements.rearrangeBtn.addEventListener('click', () => this.manager.toggleRearrangeMode());
         this.elements.downloadConfigBtn.addEventListener('click', () => this.manager.downloadConfig());
-        this.elements.uploadConfigBtn.addEventListener('click', () => document.getElementById('upload-config-input').click());
-        this.elements.cosmeticsBtn.addEventListener('click', () => this.manager.themeManager.open());
-        this.elements.storageBtn.addEventListener('click', () => this.manager.showDbManagerModal());
-        this.elements.switchBoardBtn.addEventListener('click', () => this.manager.boardManager.open());
+        this.elements.uploadConfigBtn.addEventListener('click', () => this.manager.uploadConfig());
+        this.elements.cosmeticsBtn.addEventListener('click', () => this.manager.openThemeManager());
+        this.elements.storageBtn.addEventListener('click', () => this.manager.openDbManager());
+        this.elements.switchBoardBtn.addEventListener('click', () => this.manager.openBoardManager());
 
         
         const addCardContent = this.elements.addCardDockContent;

@@ -35,19 +35,21 @@ export class SoundboardManager {
         this.isRearranging = false;
 
         this.managerAPI = {
-            getCardById: this.getCardById.bind(this),
+            getCardById: (id) => this.getCardById(id),
             getAllCards: () => this.allCards,
-            showConfirmModal: this.showConfirmModal.bind(this),
-            registerCardCommands: this.registerCardCommands.bind(this),
-            handleCardCommand: this.handleCardCommand.bind(this),
-            handleCardMigration: this.handleCardMigration.bind(this),
-            toggleRearrangeMode: this.toggleRearrangeMode.bind(this),
-            downloadConfig: this.downloadConfig.bind(this),
+            getBoardId: () => this.db.boardId,
+            showConfirmModal: (message) => this.showConfirmModal(message),
+            confirm: (message) => this.showConfirmModal(message),
+            registerCardCommands: (cardId, commands) => this.registerCardCommands(cardId, commands),
+            handleCardCommand: (command) => this.handleCardCommand(command),
+            handleCardMigration: (task) => this.handleCardMigration(task),
+            toggleRearrangeMode: () => this.toggleRearrangeMode(),
+            downloadConfig: () => this.downloadConfig(),
             uploadConfig: () => document.getElementById('upload-config-input').click(),
             openThemeManager: () => this.themeManager.open(),
             openDbManager: () => this.showDbManagerModal(),
             openBoardManager: () => this.boardManager.open(),
-            isRearranging: this.getRearrangeMode.bind(this),
+            isRearranging: () => this.getRearrangeMode(),
             getLayout: () => this.layout,
         };
         
@@ -596,6 +598,9 @@ export class SoundboardManager {
 
     // GLOBAL EVENT LISTENERS
     _attachGlobalEventListeners() {
+
+        // for uploading configs
+        document.getElementById('upload-config-input').addEventListener('change', (e) => this.uploadConfig(e));
 
         // SOUNDBOARD TITLE
         document.getElementById('soundboard-title').addEventListener('blur', (e) => {

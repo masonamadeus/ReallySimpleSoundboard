@@ -2,9 +2,11 @@
 
 SOUNDBOARD OVERALL ================
 - Cache active google font for true offlineness
-- Fix databasemanager modal and make more robust MODAL classes
+- Fix databasemanager modal
 - Go through the indexedDB stores and make them modular per card class
-- Organize javascript files into folders
+- Make modular reusable modal elements for card settings instead of reinventing every modal
+- move logic for upload/download "config" to "upload/download board" and put in boardmanager
+- allow ingest of old soundboard presets with proper migration
 
 NOTEPAD CARDS =====================
 - Spell check

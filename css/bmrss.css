@@ -169,7 +169,6 @@ button {
 
 
 
-
 .title-and-color {
     display: flex;
     align-items: center;
@@ -255,6 +254,13 @@ input[type="range"]::-moz-range-thumb {
     min-height: 150px;
 }
 
+
+.grid-empty-placeholder .sound-card{
+    min-height: 160px; /* or whatever fits your card size */
+    background-color: transparent;
+    pointer-events: none; /* so they don't interfere with drag/drop unless you want them to */
+}
+
 .sound-card.swap-target {
     outline: 3px solid var(--highlight-color);
     outline-offset: 2px;
@@ -327,14 +333,16 @@ input[type="range"]::-moz-range-thumb {
     cursor: nwse-resize;
     background-color: var(--highlight-color);
     border-top-left-radius: 8px;
-    opacity: 0; /* Hidden by default */
+    display: none;
     transition: opacity 0.2s ease-in-out;
     z-index: 100;
 }
 
+
+
 /* Show the handle only when rearranging */
 .soundboard-grid.rearrange-mode .resize-handle {
-    opacity: 1;
+    display:block;
 }
 
 .delete-card-in-rearrange-btn {
@@ -456,7 +464,8 @@ input[type="range"]::-moz-range-thumb {
     gap: 0.5rem;
     padding: 0 0.5rem; /* Reduced padding for mobile */
     z-index: 500;
-    pointer-events: none;
+    pointer-events: auto;
+    min-height:15%
 }
 
 .control-dock-card {
@@ -503,7 +512,7 @@ input[type="range"]::-moz-range-thumb {
     transform: translateY(calc(100% - var(--dock-peek-amount)));
 }
 
-.control-dock-card:hover {
+#control-dock:hover .control-dock-card {
     transform: translateY(calc(100% - var(--dock-peek-amount) - var(--dock-hover-raise))) rotate(0);
 }
 

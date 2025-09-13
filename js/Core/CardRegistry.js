@@ -15,4 +15,12 @@ export class CardRegistry {
     getRegisteredTypes() {
         return this.registry.keys();
     }
+
+    /**
+     * Get all registered card classes.
+     * @returns {Array<typeof import('../Cards/BaseCard.js').default>}
+     */
+    getRegisteredClasses() {
+        return Array.from(this.registry.values());
+    }
 }

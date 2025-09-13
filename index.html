@@ -207,25 +207,29 @@
     <div id="control-dock">
         <div id="add-card-dock" class="control-dock-card left">
             <h4 class="dock-card-title">Add Card</h4>
+            <p style="text-align:center">(Click and Drag!)</p>
             <div class="dock-card-content">
+                
             </div>
         </div>
         <div id="layout-board-dock" class="control-dock-card middle">
             <h4 class="dock-card-title">Layout & Boards</h4>
             <div class="dock-card-content">
                 <button id="rearrange-mode-btn">Rearrange</button>
-                <button id="switch-board-btn" class="accent-color">Switch Board</button>
+                <button id="switch-board-btn" class="accent-color">Switch Board</button>    
+                <button id="cosmetics-btn">Cosmetics</button>
             </div>
         </div>
         <div id="settings-data-dock" class="control-dock-card right">
             <h4 class="dock-card-title">Settings & Data</h4>
             <div class="dock-card-content">
-                <button id="cosmetics-btn">Cosmetics</button>
-                <button id="db-manager-btn">Storage</button>
+                <button id="db-manager-btn" class="primary-color">Storage</button>
                 <button id="upload-config-btn">Upload</button>
-                <button id="download-config-btn">Download</button>
+                <button id="download-config-btn" class="highlight-color">Download</button>
             </div>
         </div>
+                        <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
+
     </div>
 
     <!-- STORAGE/DATABASE MANAGER MODAL -->
