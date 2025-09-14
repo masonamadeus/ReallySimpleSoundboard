@@ -14,8 +14,8 @@ export class NotepadCard extends Card {
         return this.data.pages[this.data.currentPageIndex].title;
     }
 
-    constructor(cardData, soundboardManager, dbInstance) {
-        super(cardData, soundboardManager, dbInstance);
+    constructor(cardData) {
+        super(cardData);
 
         this.dropdown = this.cardElement.querySelector('.notepad-page-dropdown');
         this.selectedTitle = this.cardElement.querySelector('.selected-title');
@@ -122,7 +122,7 @@ export class NotepadCard extends Card {
             return this._handleDeleteCard(); // Ask to delete the whole card if it's the last page
         }
 
-        const confirm = await this.manager.showConfirmModal(`Are you sure you want to delete "${this.title}"?`);
+        const confirm = await MSG.confirm(`Are you sure you want to delete "${this.title}"?`);
         if (!confirm) return;
 
         const indexToDelete = this.data.currentPageIndex;

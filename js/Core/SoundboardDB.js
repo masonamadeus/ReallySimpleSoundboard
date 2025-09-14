@@ -1,9 +1,9 @@
 // ====================================================================
 // Soundboard Database Manager Class
 // ====================================================================
-
+import { MigrationManager } from "../Managers/MigrationManager.js";
 export class SoundboardDB {
-    constructor(boardIdOverride = null) {
+    constructor(boardIdOverride = null, cardTypes = ['sound', 'notepad', 'timer']) { // Accept cardTypes as a parameter with a default value
         
         this.CARD_PREFIXES = ['sound-', 'notepad-', 'timer-'];
 
@@ -20,13 +20,10 @@ export class SoundboardDB {
         this.boardId = boardId;
 
         this.DB_NAME = `BugAndMossSoundboardDB_${boardId}`;
-        this.DB_VERSION = 10;
+        this.DB_VERSION = 11;
         
-        // --- REFACTOR: Explicitly define store names for consistency ---
-        this.CARDS_STORE = 'cards';
         this.CONFIG_STORE = 'config';
-        // --- LEGACY SUPPORT: Define the old store name to be used ONLY during migration ---
-        this.LEGACY_SOUNDS_STORE = 'sounds'; 
+        this.cardTypes = cardTypes
 
         this.db = null;
 
@@ -37,40 +34,24 @@ export class SoundboardDB {
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.DB_NAME, this.DB_VERSION);
 
-            request.onupgradeneeded = event => {
+            request.onupgradeneeded = async (event) => {
                 this.db = event.target.result;
-                
-                if (!this.db.objectStoreNames.contains(this.CARDS_STORE)) {
-                    this.db.createObjectStore(this.CARDS_STORE, { keyPath: 'id' });
-                }
 
+                // Create necessary object stores if they don't exist
                 if (!this.db.objectStoreNames.contains(this.CONFIG_STORE)) {
                     this.db.createObjectStore(this.CONFIG_STORE, { keyPath: 'id' });
                 }
 
-                const transaction = event.target.transaction;
+                // Create type-specific card stores
+                this.cardTypes.forEach(type => {
+                    const storeName = `${type}_cards`;
+                    if (!this.db.objectStoreNames.contains(storeName)) {
+                        this.db.createObjectStore(storeName, { keyPath: 'id' });
+                    }
+                });
 
-
-                // --- REFACTOR: Use the defined property for the legacy store name ---
-                if (this.db.objectStoreNames.contains(this.LEGACY_SOUNDS_STORE)) {
-                    const oldSoundsStore = transaction.objectStore(this.LEGACY_SOUNDS_STORE);
-                    const newCardsStore = transaction.objectStore(this.CARDS_STORE);
-                    
-                    oldSoundsStore.getAll().onsuccess = (e) => {
-                        const allSounds = e.target.result;
-                        allSounds.forEach(sound => {
-                            const newId = `sound-${sound.id}`;
-                            // Ensure we don't overwrite existing data if migration runs multiple times
-                            newCardsStore.get(newId).onsuccess = (getRequest) => {
-                                if (!getRequest.result) {
-                                    newCardsStore.put({ ...sound, id: newId, type: 'sound' });
-                                }
-                            };
-                        });
-                    };
-                    // It's good practice to delete the old store after migration
-                    // this.db.deleteObjectStore(this.LEGACY_SOUNDS_STORE);
-                }
+                // Run migrations if needed
+                await MigrationManager.run(event, { cardTypes: this.cardTypes });
             };
 
             request.onsuccess = event => {
@@ -104,62 +85,127 @@ export class SoundboardDB {
         });
     }
 
-    /* 
-        I think I want to make this smarter.
-        Rather than define a list of cards here, why not just create a store based on the CLASS of what is calling save?
-        Surely we could get the name of the class from just the data object. Or use the 'type' field
-    */
 
-   // Save a piece of data to the appropriate store
+    _getStoreName(idOrType) {
+        // an ID will be like 'sound-uuid', a type will just be 'sound'
+        const type = idOrType.split('-')[0];
+        if (this.cardTypes.includes(type)) {
+            return `${type}_cards`;
+        }
+        return this.CONFIG_STORE; // Default to config store
+    }
+    
     async save(id, data) {
-        const isCardId = this.CARD_PREFIXES.some(prefix => id.startsWith(prefix));
-        const storeName = isCardId ? this.CARDS_STORE : this.CONFIG_STORE;
-        
-        const saveData = { id, ...(data.id !== undefined ? data : { ...data, id }) };
+        const storeName = this._getStoreName(id);
+        const saveData = { ...data, id };
         return this._dbRequest(storeName, 'readwrite', 'put', saveData);
     }
 
-    // Get a piece of data from the appropriate store
     async get(id) {
-        const isCardId = this.CARD_PREFIXES.some(prefix => id.startsWith(prefix));
-        const storeName = isCardId ? this.CARDS_STORE : this.CONFIG_STORE;
+        const storeName = this._getStoreName(id);
         return this._dbRequest(storeName, 'readonly', 'get', id);
+    }
+
+    async delete(id) {
+        const storeName = this._getStoreName(id);
+        return this._dbRequest(storeName, 'readwrite', 'delete', id);
+    }
+
+    async getAllCards() {
+        if (!this.db) return [];
+
+        const existingCardStores = this.cardTypes
+            .map(type => `${type}_cards`)
+            .filter(storeName => this.db.objectStoreNames.contains(storeName));
+
+        // If no card stores exist in this DB yet, there's nothing to fetch.
+        if (existingCardStores.length === 0) {
+            return [];
+        }
+
+        const transaction = this.db.transaction(existingCardStores, 'readonly');
+        const allCards = [];
+
+        await Promise.all(
+            existingCardStores.map(storeName => {
+                return new Promise((resolve, reject) => {
+                    const request = transaction.objectStore(storeName).getAll();
+                    request.onsuccess = () => {
+                        allCards.push(...request.result);
+                        resolve();
+                    };
+                    request.onerror = () => reject(request.error);
+                });
+            })
+        );
+        return allCards;
     }
 
     // Get all data from both stores
     async getAll() {
-        const cardData = await this._dbRequest(this.CARDS_STORE, 'readonly', 'getAll');
+        const cardData = await this.getAllCards();
         const configData = await this._dbRequest(this.CONFIG_STORE, 'readonly', 'getAll');
         return [...cardData, ...configData];
     }
 
-    // Delete a record from the appropriate store
-    async delete(id) {
-        const isCardId = this.CARD_PREFIXES.some(prefix => id.startsWith(prefix));
-        const storeName = isCardId ? this.CARDS_STORE : this.CONFIG_STORE;
-        return this._dbRequest(storeName, 'readwrite', 'delete', id);
+   async clear() {
+        if (!this.db) return Promise.reject("Database is not open.");
+        const storeNames = [this.CONFIG_STORE, ...this.cardTypes.map(type => `${type}_cards`)];
+        const transaction = this.db.transaction(storeNames, 'readwrite');
+        await Promise.all(storeNames.map(name => {
+            return new Promise((resolve, reject) => {
+                const request = transaction.objectStore(name).clear();
+                request.onsuccess = resolve;
+                request.onerror = reject;
+            });
+        }));
     }
 
-    async clear() {
+     /**
+     * Deletes an entire IndexedDB database by its boardId.
+     * This is a static method because it operates without an open connection.
+     * @param {string} boardId The board ID (e.g., "my-cool-board").
+     * @returns {Promise<boolean>}
+     */
+    static deleteDatabase(boardId) {
+        const dbName = `BugAndMossSoundboardDB_${boardId}`;
         return new Promise((resolve, reject) => {
-            if (!this.db) {
-                return reject("Database is not open.");
-            }
-            // Open a transaction that includes all stores you want to clear
-            const transaction = this.db.transaction([this.CARDS_STORE, this.CONFIG_STORE], 'readwrite');
-            
-            transaction.oncomplete = () => {
-                resolve();
-            };
-            
-            transaction.onerror = () => {
-                reject(transaction.error);
-            };
+            console.log(`Requesting deletion of database: ${dbName}`);
+            const deleteRequest = indexedDB.deleteDatabase(dbName);
 
-            // Clear each store within the same transaction
-            transaction.objectStore(this.CARDS_STORE).clear();
-            transaction.objectStore(this.CONFIG_STORE).clear();
+            deleteRequest.onsuccess = () => {
+                console.log(`Database "${dbName}" deleted successfully.`);
+                resolve(true);
+            };
+            deleteRequest.onerror = (event) => {
+                console.error(`Error deleting database "${dbName}":`, event);
+                reject(new Error(`Error deleting database.`));
+            };
+            deleteRequest.onblocked = () => {
+                console.warn(`Deletion of database "${dbName}" is blocked.`);
+                alert(`Could not delete the board because it's open in another tab. Please close other tabs and try again.`);
+                reject(new Error('Deletion blocked.'));
+            };
         });
+    }
+
+    /**
+     * A static helper to get all data from a specific board's database.
+     * Ensures the database connection is properly closed.
+     * @param {string} boardId The ID of the board to query.
+     * @returns {Promise<Array<Object>>}
+     */
+    static async getDataFromBoard(boardId) {
+        const tempDb = new SoundboardDB(boardId);
+        try {
+            await tempDb.openDB();
+            return await tempDb.getAll();
+        } finally {
+            // CRITICAL FIX: Ensure the connection is closed even if errors occur.
+            if (tempDb.db && typeof tempDb.db.close === 'function') {
+                tempDb.db.close();
+            }
+        }
     }
 
 

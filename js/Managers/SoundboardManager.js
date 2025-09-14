@@ -1,8 +1,8 @@
 import { Card } from '../Cards/BaseCard.js';
 import { MSG } from '../Core/MSG.js';
 import { SoundboardDB } from '../Core/SoundboardDB.js';
-import { GridManager, Layout, LayoutNode } from './LayoutManager.js';
-import { BoardManager } from './BoardManager.js';
+import { GridManager } from './GridManager.js';
+import { Layout, LayoutNode } from '../Core/Layout.js';
 import { ThemeManager } from './ThemeManager.js';
 import { CardRegistry } from '../Core/CardRegistry.js';
 import { ControlDockManager } from './ControlDockManager.js';
@@ -10,6 +10,7 @@ import {
     getAudioDuration, formatIdAsTitle, formatBytes,
     debounce
 } from '../Core/helper-functions.js';
+import { store } from '../Core/StateStore.js';
 
 
 
@@ -25,43 +26,21 @@ export class SoundboardManager {
     //#region Constructor
     constructor(dbInstance) {
         this.db = dbInstance;
-        this.allCards = new Map();
         this.allCardCommands = new Map();
         this.migrationQueue = [];
         this.isMigrating = false;
-        this.GRID_LAYOUT_KEY = 'grid-layout';
-        this.layout = new Layout();
-        this.isRearranging = false;
-
-        this.managerAPI = {
-            getCardById: (id) => this.getCardById(id),
-            getAllCards: () => this.allCards,
-            getBoardId: () => this.db.boardId,
-            showConfirmModal: (message) => this.showConfirmModal(message),
-            confirm: (message) => this.showConfirmModal(message),
-            registerCardCommands: (cardId, commands) => this.registerCardCommands(cardId, commands),
-            handleCardCommand: (command) => this.handleCardCommand(command),
-            handleCardMigration: (task) => this.handleCardMigration(task),
-            toggleRearrangeMode: () => this.toggleRearrangeMode(),
-            openThemeManager: () => this.themeManager.open(),
-            openDbManager: () => this.dbManager.open(),
-            openBoardManager: () => this.boardManager.open(),
-            isRearranging: () => this.getRearrangeMode(),
-            getLayout: () => this.layout,
-        };
-        
+        this.GRID_LAYOUT_KEY = 'grid-layout'; // what is this doing here?
+        this.confirm = this.showConfirmModal;
     }
-
     //#endregion
 
     // #region Lifecycle
 
-    setDependencies({ themeManager, gridManager, controlDockManager, boardManager, dbManager, cardRegistry }) {
+    setDependencies({ themeManager, gridManager, controlDockManager, dataManager, cardRegistry }) {
         this.themeManager = themeManager;
         this.gridManager = gridManager;
         this.controlDock = controlDockManager;
-        this.boardManager = boardManager;
-        this.dbManager = dbManager;
+        this.dataManager = dataManager;
         this.cardRegistry = cardRegistry;
     }
 
@@ -69,10 +48,11 @@ export class SoundboardManager {
     async load() {
         this._getDOMLemons();
         this._attachManagerListeners();
+        this._attachControlDockListeners();
 
         const urlParams = new URLSearchParams(window.location.search);
         const boardId = urlParams.get('board') || 'default';
-        await BoardManager.addBoardId(boardId);
+        await this.dataManager.addBoardId(boardId);
 
         await this._loadBoardData();
         this._attachGlobalEventListeners();
@@ -82,6 +62,7 @@ export class SoundboardManager {
     _getDOMLemons(){
         this.elements = {
             soundboardGrid: document.getElementById('soundboard-grid'),
+            soundboardTitle: document.getElementById('soundboard-title'),
             controlDock: document.getElementById('control-dock'),
             controlDockCards: document.querySelectorAll('.control-dock-card'),
             boardSwitcherModal: document.getElementById('board-switcher-modal'),
@@ -92,66 +73,81 @@ export class SoundboardManager {
     async _loadBoardData() {
         await this.loadTitle();
         await this.initBugMovement();
-        await this.loadCardsAndLayout();
-        await this.broadcastAllCommands();
+        const {allCards, layout } = await this.loadCardsAndLayout();
+
+        store.dispatch({
+            type: MSG.is.INITIALIZE_STATE,
+            payload: {
+                allCards: allCards,
+                layout: layout,
+                boardId: this.db.boardId,
+            }
+        });
+
+        this.broadcastAllCommands();
     }
     // #endregion
 
     // #region Card Management
 
-    // ADD CARD
-    async addCard(type, parentId = 'root', index = -1) { // Add parentId and default it to 'root'
-        const CardClass = await this.cardRegistry.get(type);
+    async addCard(type, parentId = 'root', index = -1) {
+        const CardClass = this.cardRegistry.get(type);
         if (!CardClass) return;
 
-        const newCardInstance = Card.create(CardClass, this.managerAPI, this.db);
-        this.allCards.set(newCardInstance.id, newCardInstance);
+        const newCardInstance = Card.create(CardClass);
         await this.db.save(newCardInstance.id, newCardInstance.data);
-
-        const newNode = new LayoutNode(newCardInstance.id, newCardInstance.data.type);
-
-        const parentNode = this.layout.findNode(parentId) || this.layout;
-        const insertIndex = index === -1 ? parentNode.children.length : index;
         
-        // Use the new, more specific insertNode call
-        this.layout.insertNode(newNode, parentId, insertIndex);
-
-        await this.saveLayout(this.layout);
-        MSG.say(MSG.EVENTS.LAYOUT_CHANGED)
+        // Dispatch the state-changing action
+        store.dispatch({
+            type: MSG.STATE_ACTIONS.CARD_ADDED,
+            payload: { cardInstance: newCardInstance, parentId, index }
+        });
+        
+        // The layout is now updated in the reducer, so we get it from the store to save it.
+        await this.saveLayout(store.getState().layout);
     }
 
-    // MOVE CARD
     async moveCard(cardId, newParentId, newIndex) {
-        const { node } = this.layout.findNodeAndParent(cardId);
+        const { layout } = store.getState(); // Get current layout
+        const { node } = layout.findNodeAndParent(cardId);
         if (node) {
-            this.layout.removeNode(cardId);
-            this.layout.insertNode(node, newParentId, newIndex);
+            layout.removeNode(cardId);
+            layout.insertNode(node, newParentId, newIndex);
+            
+            store.dispatch({
+                type: MSG.STATE_ACTIONS.LAYOUT_UPDATED,
+                payload: { layout }
+            });
 
-            await this.saveLayout(this.layout);
-            MSG.say(MSG.EVENTS.LAYOUT_CHANGED);
+            await this.saveLayout(layout);
         }
     }
 
-    /** RESIZE A CARD */
     async resizeCard(cardId, newGridSpan) {
-        const node = this.layout.findNode(cardId);
+        const { layout } = store.getState(); // Get current layout
+        const node = layout.findNode(cardId);
         if (node) {
             node.gridSpan = newGridSpan;
-
-            await this.saveLayout(this.layout);
-            MSG.say(MSG.EVENTS.LAYOUT_CHANGED);
+            
+            store.dispatch({
+                type: MSG.STATE_ACTIONS.LAYOUT_UPDATED,
+                payload: { layout }
+            });
+            
+            await this.saveLayout(layout);
         }
     }
-
 
     /**
     * Safely removes a card from the application by its unique ID.
     * @param {string} cardIdToRemove The unique ID of the card to be removed.
     **/
     async removeCard(cardIdToRemove) {
-        const cardInstance = this.allCards.get(cardIdToRemove);
+        const { allCards } = store.getState();
+        const cardInstance = allCards.get(cardIdToRemove);
         if (!cardInstance) return;
-
+        const confirmed = await this.showConfirmModal(`Are you sure you want to delete the card "${cardInstance.data.title}"? This action cannot be undone.`, 'Delete', 'Cancel');
+        if (!confirmed) return;
         // Perform card-specific cleanup
         if (typeof cardInstance.destroy === 'function') {
             cardInstance.destroy();
@@ -160,21 +156,21 @@ export class SoundboardManager {
         this.unregisterCardCommands(cardInstance.id);
 
         // Remove from state and DB
-        this.allCards.delete(cardIdToRemove);
         await this.db.delete(cardIdToRemove);
 
-        // Tell the GridManager to remove the node from its layout
-        this.layout.removeNode(cardIdToRemove);
+        store.dispatch({
+            type: MSG.STATE_ACTIONS.CARD_REMOVED,
+            payload: { cardId: cardIdToRemove }
+        })
         
-        // Save the updated layout
-        await this.saveLayout(this.layout);
-
-        // Update the layout
-        MSG.say(MSG.EVENTS.LAYOUT_CHANGED)
+        const { layout: updatedLayout } = store.getState();
+        await this.saveLayout(updatedLayout);
+        
     }
 
     async updateCardData(cardId, newData) {
-        const cardInstance = this.allCards.get(cardId);
+        const { allCards } = store.getState();
+        const cardInstance = allCards.get(cardId);
         if (!cardInstance) return;
 
         const oldTitle = cardInstance.data.title;
@@ -187,51 +183,40 @@ export class SoundboardManager {
 
         // 3. If the title changed, the card's command names need to be rebroadcast
         if (newData.title && newData.title !== oldTitle) {
-            // This is a great example of centralizing logic. The card doesn't
-            // need to know about commands; it just reports a data change.
+            // The card doesn't need to know about commands; it just reports a data change.
             cardInstance._rebuildCommands();
         }
-
         // 4. Tell the specific card instance to update its UI
         cardInstance.updateUI();
     }
 
-    getCardById(id) {
-        return this.allCards.get(id);
-    }
-
     async loadCardsAndLayout() {
-        this.allCards.clear();
+        const localAllCards = new Map(); // Create a temporary map
 
         const [allCardData, savedLayoutData] = await Promise.all([
-            this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll'),
+            this.db.getAllCards(),
             this.db.get(this.GRID_LAYOUT_KEY)
         ]);
 
-        // First, create all card instances from the data
         await Promise.all(allCardData.map(async (cardData) => {
-            const CardClass = await this.cardRegistry.get(cardData.type);
+            const CardClass = this.cardRegistry.get(cardData.type);
             if (CardClass) {
-                const cardInstance = new CardClass(cardData, this.managerAPI, this.db);
-                this.allCards.set(cardInstance.id, cardInstance);
+                const cardInstance = new CardClass(cardData);
+                localAllCards.set(cardInstance.id, cardInstance); // Use the temporary map
             }
         }));
 
         let currentLayout;
         if (savedLayoutData && savedLayoutData.layout && savedLayoutData.layout.children) {
-            // "Rehydrate" the plain layout object from the DB into our Layout classes
             currentLayout = Layout.rehydrate(savedLayoutData.layout);
         } else {
-            // If no layout is saved, create a default one from the existing cards
             const children = allCardData.map(cd => new LayoutNode(cd.id, cd.type));
             currentLayout = new Layout(children);
-            await this.saveLayout(currentLayout); // Save the newly generated layout
+            await this.saveLayout(currentLayout);
         }
 
-        this.layout = currentLayout;
-        
-        // Finally, delegate the rendering task to the GridManager via event
-        MSG.say(MSG.EVENTS.LAYOUT_CHANGED)
+        // MODIFIED: Return the loaded data
+        return { allCards: localAllCards, layout: currentLayout };
     }
 
     // #endregion
@@ -241,12 +226,6 @@ export class SoundboardManager {
         return this.layout;
     }
 
-
-    toggleRearrangeMode() {
-        this.isRearranging = !this.isRearranging;
-        // Broadcast the change to all listeners
-        MSG.say(MSG.EVENTS.REARRANGE_MODE_CHANGED, this.isRearranging);
-    }
     /**
      * Saves the current layout state to the database
      * @param {Layout} layout The new layout object
@@ -285,14 +264,13 @@ export class SoundboardManager {
      * This is debounced to prevent event storms during rapid updates.
      */
     broadcastAllCommands = debounce(() => {
+        const { allCards } = store.getState();
         const commandList = [];
-        // Flatten the map's values into a single array for subscribers
         for (const commands of this.allCardCommands.values()) {
             commandList.push(...commands);
         }
 
-        // Notify each card
-        for (const card of this.allCards.values()) {
+        for (const card of allCards.values()) {
             if (typeof card.onCommandsChanged === 'function') {
                 card.refreshAvailableCommands(commandList);
             }
@@ -312,9 +290,6 @@ export class SoundboardManager {
     // #endregion
 
     // #region UI & Modals
-    getRearrangeMode(){
-        return this.gridManager.isRearranging;
-    }
 
     showConfirmModal(message, btnYesText = 'Yes', btnNoText = 'No') {
         return new Promise(resolve => {
@@ -339,6 +314,14 @@ export class SoundboardManager {
         });
     }
 
+    toggleRearrangeMode() {
+        const newRearrangeState = !store.getState().isRearranging;
+        store.dispatch({
+            type: MSG.STATE_ACTIONS.REARRANGE_MODE_TOGGLED,
+            payload: { isRearranging: newRearrangeState }
+        });
+    }
+
     // #endregion
 
     // #region Data Management
@@ -349,24 +332,33 @@ export class SoundboardManager {
 
         if (titleData && titleData.title) {
             // If a title is already saved in the database, use it.
-            document.getElementById('soundboard-title').textContent = titleData.title;
+            this.elements.soundboardTitle.textContent = titleData.title;
         } else {
             // NEW: If no title is saved, get the board ID from the URL
             // and use that as the default title.
             const urlParams = new URLSearchParams(window.location.search);
             const boardId = formatIdAsTitle(urlParams.get('board')) || 'The Bug & Moss "Really Simple" Soundboard';
-            document.getElementById('soundboard-title').textContent = boardId;
+            this.elements.soundboardTitle.textContent = boardId;
             document.title = boardId + " | B&M RSS";
         }
     }
+
 
   
     // #endregion
 
     // #region Event Listeners
 
-    // MANAGER LISTENERS
     _attachManagerListeners() {
+
+        MSG.on(MSG.ACTIONS.REQUEST_CONFIRMATION, async (data) => {
+            const { message, onConfirm, btnYesText, btnNoText } = data;
+            const result = await this.showConfirmModal(message,btnYesText, btnNoText);
+            if (typeof onConfirm === 'function') {
+                onConfirm(result); // Send the reply
+            }
+        });
+
         // Listen for a card's request to be removed
         MSG.on(MSG.ACTIONS.REQUEST_REMOVE_CARD, (data) => this.removeCard(data.cardId));
 
@@ -379,21 +371,34 @@ export class SoundboardManager {
         // Listen for requests to move a card
         MSG.on(MSG.ACTIONS.REQUEST_MOVE_CARD, (data) => this.moveCard(data.cardId, data.newParentId, data.newIndex));
 
-        // Liten for requests to resize a card
+        // Listen for requests to resize a card
         MSG.on(MSG.ACTIONS.REQUEST_RESIZE_CARD, (data) => this.resizeCard(data.cardId, data.newGridSpan));
 
+        // Listen for card command registrations
+        MSG.on(MSG.ACTIONS.REQUEST_REGISTER_COMMANDS, (data) => this.registerCardCommands(data.cardId, data.commands));
+
+    }
+
+    _attachControlDockListeners() {
+        MSG.on(MSG.ACTIONS.REQUEST_SWITCH_BOARD, () => this.dataManager.openBoardSwitcher());
+        MSG.on(MSG.ACTIONS.REQUEST_OPEN_STORAGE_DATA, () => this.dataManager.openStorageData());
+        MSG.on(MSG.ACTIONS.REQUEST_OPEN_MANAGE_BOARDS, () => this.dataManager.openManageBoards());
+        MSG.on(MSG.ACTIONS.REQUEST_TOGGLE_REARRANGE_MODE, () => this.toggleRearrangeMode());
+        MSG.on(MSG.ACTIONS.REQUEST_OPEN_THEME_MANAGER, () => this.themeManager.open());
     }
 
     // GLOBAL EVENT LISTENERS
     _attachGlobalEventListeners() {
 
         // SOUNDBOARD TITLE
-        document.getElementById('soundboard-title').addEventListener('blur', (e) => {
+        this.elements.soundboardTitle.addEventListener('blur', (e) => {
             //@ts-ignore
             const newTitle = e.target.textContent.trim();
             document.title = newTitle + " | B&M RSS";
             this.db.save('soundboard-title', { id: 'soundboard-title', title: newTitle });
         });
+
+        
 
 
         // HELPFUL BUG

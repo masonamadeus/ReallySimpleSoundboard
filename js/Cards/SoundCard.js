@@ -33,8 +33,8 @@ export class SoundCard extends Card {
     }
     //#region Lifecycle
 
-    constructor(cardData, soundboardManager, dbInstance) {
-        super(cardData, soundboardManager, dbInstance)
+    constructor(cardData) {
+        super(cardData)
 
         // BINDINGS
         this.boundPriorityPlayHandler = this._handlePriorityPlay.bind(this);
@@ -117,24 +117,11 @@ export class SoundCard extends Card {
     }
 
     _initialize() {
-        this._checkforMigration();
         this._attachListeners();
         this.updateUI();
     }
 
-    _checkforMigration() {
-        // duration in ms needs to be updated if it's not there
-        this.data.files.forEach((file, index) => {
-            // If a file from the DB is missing the duration, it needs migrating.
-            if (file.durationMs === undefined) {
-                this.manager.handleCardMigration({
-                    card: this,
-                    file: file,
-                    fileIndex: index
-                });
-            }
-        });
-    }
+    
 
     _registerCommands() {
         // Register the main "Press" command for the whole card. PROBLEM: TOGGLEPLAY HAS INDETERMINATE DURATION
@@ -571,7 +558,7 @@ export class SoundCard extends Card {
     }
 
     async _handleClearFiles() {
-        const confirmed = await this.manager.showConfirmModal("Are you sure you want to clear all audio files for this button?");
+        const confirmed = await MSG.confirm("Are you sure you want to clear all audio files for this button?");
         if (confirmed) {
             this.player.stop();
             await this.updateData({ files: [] });

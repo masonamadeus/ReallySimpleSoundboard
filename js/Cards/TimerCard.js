@@ -36,8 +36,8 @@ export class TimerCard extends Card {
 
     //#region Constructor
 
-    constructor(cardData, soundboardManager, dbInstance) {
-        super(cardData, soundboardManager, dbInstance);
+    constructor(cardData) {
+        super(cardData);
 
         // TITLE AND DISPLAY
         /** @type {HTMLElement} */
@@ -277,7 +277,7 @@ export class TimerCard extends Card {
         //@ts-ignore
         const newMode = this.cardElement.querySelector('.timer-mode-radio:checked').value
 
-        if (newMode != this.data.mode && !this.data.isRunning){
+        if (newMode && newMode != this.data.mode && !this.data.isRunning){
             this.reset();
         }
 

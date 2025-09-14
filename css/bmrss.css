@@ -379,6 +379,8 @@ input[type="range"]::-moz-range-thumb {
     cursor: grab;
 }
 
+
+
 /* Show the button only when rearrange mode is active on the grid */
 .soundboard-grid.rearrange-mode .sound-card .delete-card-in-rearrange-btn {
     display: block;
@@ -457,7 +459,7 @@ input[type="range"]::-moz-range-thumb {
 
 #control-dock {
     --dock-peek-amount: 25%; /* Adjust peek amount for two cards */
-    --dock-hover-raise: 35%;
+    --dock-hover-raise: 25%;
 
     position: fixed;
     bottom: 0;
@@ -468,7 +470,7 @@ input[type="range"]::-moz-range-thumb {
     align-items: flex-end;
     gap: 0.5rem;
     padding: 0 1rem; /* A bit more padding on the sides */
-    z-index: 500;
+    z-index: 50;
     pointer-events: auto;
     min-height:15%
 }
@@ -484,7 +486,7 @@ input[type="range"]::-moz-range-thumb {
     transition: transform 0.3s ease-in-out;
     box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.25);
     pointer-events: all;
-    min-height: 100px;
+    min-height: 150px;
 }
 
 .dock-card-title {
@@ -507,7 +509,6 @@ input[type="range"]::-moz-range-thumb {
     transform: translateY(calc(100% - var(--dock-peek-amount))) rotate(3deg);
 }
 
-/* REMOVED the .middle rule */
 
 #control-dock:hover .control-dock-card {
     transform: translateY(calc(100% - var(--dock-peek-amount) - var(--dock-hover-raise))) rotate(0);
@@ -571,6 +572,10 @@ input[type="range"]::-moz-range-thumb {
 .card-sticker:hover {
     /* REMOVED: transform: scale(...) */
     box-shadow: 0 0 10px var(--highlight-color); /* Add a glow instead of scaling */
+}
+
+#add-card-dock .card-sticker .interaction-shield {
+    display: block !important;
 }
 
 .sticker-container {
@@ -923,6 +928,48 @@ timer-display span {
     justify-content: space-between;
 }
 
+/* New Modal Styles */
+.scrollable {
+    max-height: 300px;
+    overflow-y: auto;
+    border: 1px solid var(--secondary-color);
+    padding: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.board-list-item {
+    background-color: var(--background-color);
+    color: var(--background-color-text);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem;
+    border-bottom: 1px solid var(--secondary-color);
+}
+
+.board-list-item:last-child {
+    border-bottom: none;
+}
+
+
+
+.manage-boards-layout {
+    display: flex;
+    gap: 1rem;
+}
+
+.manage-boards-sidebar {
+    flex: 1;
+}
+
+.db-viewer {
+    flex: 2;
+}
+
+.modal-content.wide {
+    max-width: 800px;
+}
+
 /* --- Specific Modal Buttons --- */
 .file-input-container label,
 .modal-actions-row button,
@@ -1098,6 +1145,86 @@ timer-display span {
 .confirm-no-btn {
     background-color: var(--highlight-color);
     color: var(--highlight-color-text);
+}
+
+/* =================================================================== */
+/* RECURSIVE DB EXPLORER MENU
+/* =================================================================== */
+.db-explorer-menu {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 0.9rem;
+    font-family: monospace;
+}
+
+.db-explorer-menu li {
+    position: relative;
+    border-left: 1px solid var(--secondary-color);
+}
+
+.db-explorer-menu .db-menu-label {
+    padding: 4px 8px;
+    cursor: default;
+    white-space: nowrap;
+    display: block;
+}
+
+.db-explorer-menu li:hover > .db-menu-label {
+    background-color: var(--highlight-color);
+    color: var(--highlight-color-text);
+}
+
+.db-explorer-menu strong {
+    color: var(--primary-color);
+}
+
+.db-explorer-menu .db-value {
+    color: var(--accent-color);
+}
+
+.db-explorer-menu .db-value-object {
+    color: var(--panel-color-text);
+    font-style: italic;
+}
+
+.db-explorer-menu .db-value-omitted {
+    color: #999;
+    font-style: italic;
+}
+
+/* --- Sub-menu Behavior --- */
+.db-explorer-menu .has-children > .db-menu-label::after {
+    content: '▸';
+    display: inline-block;
+    margin-left: 8px;
+}
+
+.db-explorer-menu .has-children > ul {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: 0;
+    background-color: var(--background-color);
+    border: 1px solid var(--panel-color);
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    padding-left: 0;
+    min-width: 200px;
+    z-index: 1010; /* Ensure it appears above other modal content */
+}
+
+/* Show on hover for desktop */
+.db-explorer-menu .has-children:hover > ul {
+    display: block;
+}
+
+/* Show on tap for mobile (toggled by JS) */
+.db-explorer-menu .has-children.open > ul {
+    display: block;
+}
+
+.db-explorer-menu .has-children.open > .db-menu-label::after {
+    transform: rotate(90deg);
 }
 
 /* =================================================================== */

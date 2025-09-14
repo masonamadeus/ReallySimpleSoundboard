@@ -184,7 +184,7 @@ export class ThemeManager {
     }
 
     async _handleResetCosmetics() {
-        const confirmed = await this.soundboardManager.showConfirmModal('Are you sure you want to reset appearance settings? This cannot be undone.');
+        const confirmed = await MSG.confirm('Are you sure you want to reset appearance settings? This cannot be undone.');
         if (confirmed) this.resetCurrentCosmetics();
     }
 
@@ -193,7 +193,7 @@ export class ThemeManager {
         if (!file) return;
 
         // The confirmation message is now much clearer
-        const confirmed = await this.soundboardManager.showConfirmModal("This will overwrite your entire theme library with the contents of this file. Are you sure?");
+        const confirmed = await MSG.confirm("This will overwrite your entire theme library with the contents of this file. Are you sure?");
 
         if (confirmed) {
             const success = await this.uploadThemeLibrary(file);
@@ -212,7 +212,7 @@ export class ThemeManager {
         if (!file) return;
 
         // The confirmation message is now much clearer
-        const applyNow = await this.soundboardManager.showConfirmModal(`Uploaded Theme: ${file.name}. Apply Now?`);
+        const applyNow = await MSG.confirm(`Uploaded Theme: ${file.name}. Apply Now?`);
         const success = await this.uploadTheme(file, applyNow);
         if (success) {
             // Refresh the list to show the newly uploaded themes
@@ -247,7 +247,7 @@ export class ThemeManager {
     async _handleDeleteTheme(themeId) {
         const themes = await this.getThemeLibrary();
         const themeName = themes[themeId]?.name || 'this theme';
-        const confirmed = await this.soundboardManager.showConfirmModal(`Delete "${themeName}" from your library?`);
+        const confirmed = await MSG.confirm(`Delete "${themeName}" from your library?`);
         if (confirmed) {
             await this.deleteThemeFromLibrary(themeId);
             this._renderThemeList();
@@ -567,7 +567,8 @@ export class ThemeManager {
         // If the theme is "dirty" (unnamed), we need to prompt the user.
         if (!themeName) {
             const timestamp = new Date().toISOString().slice(0, 10); // e.g., "2025-08-23"
-            const suggestedName = `${this.soundboardManager.boardName}_Theme ${timestamp}`;
+            const boardId = store.getState().boardId || 'Board';
+            const suggestedName = `${boardId}_Theme ${timestamp}`;
 
             // Use the browser's built-in prompt to ask the user for a name.
             themeName = prompt("This is an unsaved theme. Please provide a name to save and download it.", suggestedName);

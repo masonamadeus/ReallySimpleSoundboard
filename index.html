@@ -215,51 +215,10 @@
             <h4 class="dock-card-title">Manage Board</h4>
             <div class="dock-card-content">
                 <button id="rearrange-mode-btn" class="highlight-color">Rearrange</button>
-                <button id="switch-board-btn" class="accent-color">Switch Board</button>
-                <button id="cosmetics-btn" class="background-color">Cosmetics</button>
-                <button id="db-manager-btn" class="primary-color">Storage</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- STORAGE/DATABASE MANAGER MODAL -->
-    <div id="db-manager-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>Local Database Manager</h3>
-            </div>
-            <div class="modal-section">
-                <div id="db-stats-container">
-                    <div class="stat-line">
-                        <span>Total Buttons:</span> <span id="db-button-count">Calculating...</span>
-                    </div>
-                    <div class="stat-line">
-                        <span>IndexedDB Usage:</span> <span id="db-usage">Calculating...</span>
-                    </div>
-                    <div class="stat-line">
-                        <span>Available Quota:</span> <span id="db-quota">Calculating...</span>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-section">
-                <h3>Stored Sounds</h3>
-                <ul id="db-file-list">
-                    <li><small>No sounds found.</small></li>
-                </ul>
-            </div>
-            <div class="modal-section">
-                <div class="modal-checkbox-group">
-                    <input type="checkbox" id="persistent-storage-checkbox">
-                    <h4>Storage Durability</h4>
-                </div>
-                <small>Recommended for offline use. Your browser may ask for permission.</small>
-            </div>
-
-            <div class="modal-section">
-            </div>
-
-            <div class="modal-section">
-                <button id="clear-database-btn" class="danger">Delete Everything & Try Again</button>
+                <button id="cosmetics-btn" class="accent-color">Cosmetics</button>
+                <button id="board-switcher-btn" class="primary-color">Switch Board</button>
+                <button id="storage-data-btn" class="primary-color">Storage & Data</button>
+                <button id="manage-boards-btn" class="primary-color">Manage Boards</button>
             </div>
         </div>
     </div>
@@ -270,15 +229,11 @@
             <div class="modal-header">
                 <h3>Switch Soundboard</h3>
             </div>
-
-            
-
+        
             <div class="modal-section">
                 <ul id="board-list" class="file-list">
                 </ul>
             </div>
-
-            
 
             <div class="modal-section" style="border-top: 1px solid var(--secondary-color); padding-top: 1.5rem;">
                 <h4>Create New Board</h4>
@@ -296,6 +251,43 @@
 
         </div>
     </div>
+
+    <!-- STORAGE & DATA MODAL -->
+    <div id="storage-data-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Storage & Data Manager</h3>
+                <div class="tab-bar">
+                    <button class="tab-btn active" data-tab="basic">Board Details</button>
+                    <button class="tab-btn" data-tab="explorer">DB Explorer</button>
+                </div>
+            </div>
+            <div id="tab-basic" class="tab-content active">
+                <div class="stats-container"></div>
+                <button id="wipe-board-btn" class="danger">Wipe Current Board</button>
+            </div>
+            <div id="tab-explorer" class="tab-content">
+                <div class="db-explorer-container scrollable"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- BOARD MANAGER MODAL -->
+    <div id="manage-boards-modal" class="modal">
+        <div class="modal-content wide">
+            <h3>Advanced Board Manager</h3>
+            <div class="manage-boards-layout">
+                <div class="manage-boards-sidebar">
+                    <h4>Select Board</h4>
+                    <select id="board-select"></select>
+                    <div class="file-summary scrollable"></div>
+                    <button id="delete-board-btn" class="danger">Delete Selected Board</button>
+                </div>
+                <div class="db-viewer scrollable"></div>
+            </div>
+        </div>
+    </div>
+    
 
     <!-- COSMETICS MODAL -->
     <div id="cosmetics-modal" class="modal">
@@ -384,7 +376,6 @@
     
         </div>
     </div>
-
     <template id="theme-list-item-template">
         <li>
             <span class="theme-name"></span>

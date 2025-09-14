@@ -1,11 +1,11 @@
 import { MSG } from '../Core/MSG.js';
+import { store } from '../Core/StateStore.js';
 export class ControlDockManager {
     /**
      * Manages the new three-card control dock at the bottom of the screen.
      * @param {import('./SoundboardManager.js').SoundboardManager} soundboardManager
      */
-    constructor(soundboardManager) {
-        this.manager = soundboardManager; // Reference to the main manager
+    constructor() {
         this.openCard = null; // Tracks which card is currently open
         this.dockContainer = null; // the control dock container
         this.cards = null; // The control cards
@@ -22,23 +22,35 @@ export class ControlDockManager {
         this._getDOMLemons();
         this._attachListeners();
         this._populateAddCardDock();
+        
+        // Subscribe to store updates to reflect rearrange mode changes
+        store.subscribe(() => {
+            const { isRearranging } = store.getState();
+            this.elements.rearrangeBtn.textContent = isRearranging ? 'Done' : 'Rearrange';
+        });
     }
 
     _getDOMLemons() {
         this.elements = {
             rearrangeBtn: document.getElementById('rearrange-mode-btn'),
             cosmeticsBtn: document.getElementById('cosmetics-btn'),
-            storageBtn: document.getElementById('db-manager-btn'),
-            switchBoardBtn: document.getElementById('switch-board-btn'),
+            dataBtn: document.getElementById('manage-data-btn'),
             addCardDockContent: document.querySelector('#add-card-dock .dock-card-content'),
+            switchBoardBtn: document.getElementById('board-switcher-btn'),
+            storageBtn: document.getElementById('storage-data-btn'),
+            manageBoardsBtn: document.getElementById('manage-boards-btn'),
+            newNameInput: document.getElementById('new-board-name-input'),
         }
     }
 
     _attachListeners() {
 
-        MSG.on(MSG.EVENTS.REARRANGE_MODE_CHANGED, (isEnabled) => {
-            this.elements.rearrangeBtn.textContent = isEnabled ? 'Done' : 'Rearrange';
-        });
+        this.elements.switchBoardBtn.addEventListener('click', () => MSG.say(MSG.ACTIONS.REQUEST_SWITCH_BOARD));
+        this.elements.storageBtn.addEventListener('click', () => MSG.say(MSG.ACTIONS.REQUEST_OPEN_STORAGE_DATA));
+        this.elements.manageBoardsBtn.addEventListener('click', () => MSG.say(MSG.ACTIONS.REQUEST_OPEN_MANAGE_BOARDS));
+        this.elements.rearrangeBtn.addEventListener('click', () => MSG.say(MSG.ACTIONS.REQUEST_TOGGLE_REARRANGE_MODE));
+        this.elements.cosmeticsBtn.addEventListener('click', () => MSG.say(MSG.ACTIONS.REQUEST_OPEN_THEME_MANAGER));
+
 
         const addCardDock = document.getElementById('add-card-dock');
 
@@ -68,14 +80,6 @@ export class ControlDockManager {
                 }
             });
         });
-
-
-        // --- Relocated Button Listeners ---
-        this.elements.rearrangeBtn.addEventListener('click', () => this.manager.toggleRearrangeMode());
-        this.elements.cosmeticsBtn.addEventListener('click', () => this.manager.openThemeManager());
-        this.elements.storageBtn.addEventListener('click', () => this.manager.openDbManager());
-        this.elements.switchBoardBtn.addEventListener('click', () => this.manager.openBoardManager());
-
         
         const addCardContent = this.elements.addCardDockContent;
         addCardContent.addEventListener('wheel', (event) => {
@@ -107,7 +111,7 @@ export class ControlDockManager {
                 const container = document.createElement('div');
                 container.className = 'sticker-container';
 
-                const tempCard = new CardClass(CardClass.Default(), this.manager, null);
+                const tempCard = new CardClass(CardClass.Default());
                 const stickerElement = tempCard.cardElement;
 
                 // --- (All stickerElement modifications remain the same) ---

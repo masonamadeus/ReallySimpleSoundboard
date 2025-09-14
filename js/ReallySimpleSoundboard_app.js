@@ -2,10 +2,10 @@ import { SoundboardManager } from './Managers/SoundboardManager.js';
 import { SoundboardDB } from './Core/SoundboardDB.js';
 import { CardRegistry } from './Core/CardRegistry.js';
 import { ThemeManager } from './Managers/ThemeManager.js';
-import { GridManager } from './Managers/LayoutManager.js';
+import { GridManager } from './Managers/GridManager.js';
 import { ControlDockManager } from './Managers/ControlDockManager.js';
-import { BoardManager } from './Managers/BoardManager.js';
-import { DbManager } from './Managers/DbManager.js';   
+import { DataManager } from './Managers/DataManager.js';
+import { store } from './Core/StateStore.js';
 
 // EVENTUALLY NEED TO MAKE IT SO THERE DO NOT NEED TO BE EXPLICIT REFS TO IMPORT CARD TYPES
 import { SoundCard } from './Cards/SoundCard.js';
@@ -57,48 +57,51 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log('PWA was installed');
     });
 
-    // Create dependencies
-    const db = new SoundboardDB();
-    await db.openDB();
+    // --- Create dependencies ---
 
+    // Create the CardRegistry FIRST
     const cardRegistry = new CardRegistry();
-    // EVENTUALLY NEED TO MAKE IT SO THERE DO NOT NEED TO BE EXPLICIT REFS TO IMPORT CARD TYPES
     cardRegistry.register('sound', SoundCard);
     cardRegistry.register('timer', TimerCard);
     cardRegistry.register('notepad', NotepadCard);
 
-    // 1. Instantiate all managers, passing the API to UI managers
+    // Get the list of card types
+    const cardTypes = Array.from(cardRegistry.getRegisteredTypes());
+
+    // Pass the types to the DB constructor
+    const db = new SoundboardDB(null, cardTypes); // Pass null to get boardId from URL
+    await db.openDB();
+
+    const defaultDb = new SoundboardDB('default', cardTypes);
+    await defaultDb.openDB();
+
+    // --- Instantiate all managers, passing the API to UI managers ---
     const soundboardManager = new SoundboardManager(db);
     const themeManager = new ThemeManager(soundboardManager.managerAPI);
-    const gridManager = new GridManager(soundboardManager.managerAPI);
-    const controlDockManager = new ControlDockManager(soundboardManager.managerAPI);
-    const boardManager = new BoardManager(soundboardManager.managerAPI);
-    const dbManager = new DbManager(soundboardManager.managerAPI);
+    const gridManager = new GridManager();
+    const controlDockManager = new ControlDockManager();
+    const dataManager = new DataManager(soundboardManager.managerAPI);
 
     // 2. Set the SoundboardManager's dependencies so it knows about the UI managers
     soundboardManager.setDependencies({
         themeManager,
         gridManager,
         controlDockManager,
-        boardManager,
+        dataManager,
         cardRegistry
     });
 
     // 3. Initialize all UI managers so they are ready to listen for events
     await themeManager.init(
         db,
-        new SoundboardDB('default'),
+        defaultDb,
     );
 
-    await dbManager.init(
+    await dataManager.init(
         db,
-    );
-
-    await boardManager.init(
-        document.getElementById('board-switcher-modal'), 
-        document.getElementById('board-list'),
-        document.getElementById('upload-board-input'),
-    );
+        defaultDb,
+        cardRegistry
+    )
 
     await gridManager.init(
         document.getElementById('soundboard-grid'), 
@@ -109,6 +112,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('control-dock'), 
         document.querySelectorAll('.control-dock-card'), 
         cardRegistry);
+
+    // Add the current board to the master list if it's not already there.
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentBoardId = urlParams.get('board') || 'default';
+    await dataManager.addBoardId(currentBoardId);
 
     // 4. NOW, load the data. The UI managers are ready to catch the events.
     await soundboardManager.load();

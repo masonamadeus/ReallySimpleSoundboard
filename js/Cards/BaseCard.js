@@ -1,5 +1,6 @@
 import { MSG } from '../Core/MSG.js';
 import { Modal } from '../Core/Modal.js'
+import { store } from '../Core/StateStore.js';
 //#region TICKET CLASS
 class Ticket {
     /**
@@ -39,14 +40,11 @@ export class Card {
      * The constructor for all card types.
      * @param cardData The initial data for the card from the database.
      * @param soundboardManagerAPI A reference to the main manager.
-     * @param dbInstance A reference to the database.
      */
-    constructor(cardData, soundboardManagerAPI, dbInstance) {
+    constructor(cardData) {
         //@ts-ignore This class is only ever extended, we can guarantee there's always a constructor.
         const defaultData = this.constructor.Default();
         this.data = { ...defaultData, ...cardData };
-        this.manager = soundboardManagerAPI;
-        this.db = dbInstance;
         this.id = this.data.id;
 
         this.cardElement = this._createElement();
@@ -124,14 +122,16 @@ export class Card {
     // Add this generic helper method to open the modal
     _openSettingsModal() {
         const config = this.getSettingsConfig();
+        // If a card has no config, do nothing.
         if (!config) return;
 
-        // The Modal takes the title, the config object, the current data, and a save callback
+        // The Modal takes the title, the config object, the card's current data,
+        // and a callback function to save the updated data.
         const modal = new Modal(
             `${this.data.title} Settings`,
             config,
             this.data,
-            (newData) => this.updateData(newData) // Pass the updateData method as the callback
+            (newData) => this.updateData(newData) // Pass the updateData method as the save callback
         );
         modal.open();
     }
@@ -144,7 +144,10 @@ export class Card {
     _rebuildCommands() {
         this.commands = [];
         this._registerCommands();
-        this.manager.registerCardCommands(this.id, this.commands);
+        MSG.say(MSG.ACTIONS.REQUEST_REGISTER_COMMANDS, {
+            cardId: this.id,
+            commands: this.commands
+        });
     }
 
     registerCommand({ name, preload, execute }) {
@@ -202,12 +205,6 @@ export class Card {
             return;
         }
         
-        const targetCard = this.manager.getCardById(command.targetCard);
-        if (!targetCard) {
-            MSG.log(`No card found matching: ${command.targetCard}`,1, command.targetCard);
-            return;
-        }
-
         if (!command.preload){
             MSG.log(`Command ${commandId} has no preload method defined.`,1);
             return
@@ -231,10 +228,11 @@ export class Card {
 
     // ========================================================================================================
     // DADDY LEVEL METHODS
+
     // #region Data Management
 
-    static create(CardClass, managerAPI, db) {
-        const type = CardClass.Default().type; // Get type from the default data
+    static create(CardClass) {
+        const type = CardClass.Default().type;
         if (!type) throw new Error("Card's Default() method must include a 'type' property.");
 
         const newId = `${type}-${crypto.randomUUID()}`
@@ -243,7 +241,7 @@ export class Card {
             ...defaultData,
             id: newId,
         };
-        return new CardClass(newCardData, managerAPI, db);
+        return new CardClass(newCardData);
     }
 
     async updateData(newData) {
@@ -275,17 +273,15 @@ export class Card {
 
         cardElement.dataset.cardId = this.data.id;
         cardElement.dataset.cardType = this.data.type;
-        cardElement.setAttribute('draggable', this.manager.isRearranging());
+        cardElement.setAttribute('draggable', store.getState().isRearranging);
 
         return cardElement;
     } 
 
     // Helper method to handle card deletion
     async _handleDeleteCard() {
-        const confirmed = await this.manager.showConfirmModal("Are you sure you want to permanently remove this card?");
-        if (confirmed) {
-            MSG.say(MSG.ACTIONS.REQUEST_REMOVE_CARD, {cardId: this.data.id})
-        }
+        MSG.say(MSG.ACTIONS.REQUEST_REMOVE_CARD, { cardId: this.data.id })
+
     }
 
     //#endregion
