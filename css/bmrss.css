@@ -22,7 +22,12 @@
     --background-color-text: #234e70;
 
     /* Typography */
+    --base-font-size: 16px;
     --font-family-primary: 'Wellfleet', sans-serif;
+}
+
+html {
+    font-size: var(--base-font-size);
 }
 
 .accent-color {
@@ -451,35 +456,30 @@ input[type="range"]::-moz-range-thumb {
 /* =================================================================== */
 
 #control-dock {
-    --dock-peek-amount: 20%;
-    --dock-hover-raise: 30%;
+    --dock-peek-amount: 25%; /* Adjust peek amount for two cards */
+    --dock-hover-raise: 35%;
 
     position: fixed;
     bottom: 0;
     left: 0;
     width: 100%;
     display: flex;
-    justify-content: center; /* Groups the cards in the middle */
+    justify-content: center;
     align-items: flex-end;
     gap: 0.5rem;
-    padding: 0 0.5rem; /* Reduced padding for mobile */
+    padding: 0 1rem; /* A bit more padding on the sides */
     z-index: 500;
     pointer-events: auto;
     min-height:15%
 }
 
 .control-dock-card {
-    /* This is the key change:
-       flex: 1 tells each card to take up an equal share of the available space.
-       min-width: 0 is a flexbox trick that allows the cards to shrink
-       below their content's natural width, which is crucial on mobile. */
     flex: 1;
     min-width: 0;
-    max-width: 300px; /* Still useful to prevent them from getting huge */
-
+    max-width: 350px; /* Allow cards to be a bit wider */
     background-color: var(--secondary-color);
     color: var(--secondary-color-text);
-    padding: 0.5rem 1rem; /* Reduced horizontal padding */
+    padding: 0.5rem 1rem;
     cursor: pointer;
     transition: transform 0.3s ease-in-out;
     box-shadow: 0 -4px 8px rgba(0, 0, 0, 0.25);
@@ -494,23 +494,20 @@ input[type="range"]::-moz-range-thumb {
     padding-top: 1rem;
     padding-bottom: 0.5rem;
     border-bottom: 2px solid var(--primary-color);
-
-    /* This makes the font size responsive to the screen width,
-       but it won't go smaller than 1rem or larger than 1.5rem. */
     font-size: clamp(1rem, 4vw, 1.5rem);
 }
 
 .control-dock-card.left {
-    transform: translateY(calc(100% - var(--dock-peek-amount))) rotate(-5deg);
+    /* Adjusted rotation for a two-card layout */
+    transform: translateY(calc(100% - var(--dock-peek-amount))) rotate(-3deg);
 }
 
 .control-dock-card.right {
-    transform: translateY(calc(100% - var(--dock-peek-amount))) rotate(5deg);
+    /* Adjusted rotation for a two-card layout */
+    transform: translateY(calc(100% - var(--dock-peek-amount))) rotate(3deg);
 }
 
-.control-dock-card.middle {
-    transform: translateY(calc(100% - var(--dock-peek-amount)));
-}
+/* REMOVED the .middle rule */
 
 #control-dock:hover .control-dock-card {
     transform: translateY(calc(100% - var(--dock-peek-amount) - var(--dock-hover-raise))) rotate(0);
@@ -535,7 +532,6 @@ input[type="range"]::-moz-range-thumb {
 }
 #add-card-dock.open .dock-card-content {
     display: grid;
-    /* Create as many 120px columns as will fit, and let them grow to fill space */
     grid-template-columns: 100%;
     gap: 1rem;
     max-height: 40vh;
@@ -557,17 +553,6 @@ input[type="range"]::-moz-range-thumb {
     text-align: center;
     background-color: var(--accent-color);
     color: var(--accent-color-text);
-}
-
-/* Specific overrides for uniquely colored buttons */
-#rearrange-mode-btn {
-    background-color: var(--highlight-color) !important;
-    color: var(--highlight-color-text) !important;
-}
-
-#switch-board-btn {
-    background-color: var(--primary-color) !important;
-    color: var(--primary-color-text) !important;
 }
 
 .card-sticker {

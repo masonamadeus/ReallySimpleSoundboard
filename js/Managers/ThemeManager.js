@@ -50,6 +50,8 @@ export class ThemeManager {
         this.themeList = document.getElementById('theme-library-list');
         this.uploadThemeInput = document.getElementById('upload-theme-input');
         this.uploadThemeLibraryInput = document.getElementById('upload-themelibrary-input');
+        this.fontSizeSlider = document.getElementById('font-size-slider');
+        this.fontSizeValue = document.getElementById('font-size-value');
     }
 
     /**
@@ -68,8 +70,10 @@ export class ThemeManager {
             //@ts-ignore
             input.addEventListener('input', (e) => this.updateColor(e.target.dataset.cssVar, e.target.value));
         });
-        //@ts-ignore
+
+        //@ts-ignore FONT INPUTS
         this.fontInput.addEventListener('change', (e) => this.updateFont(e.target.value));
+        this.fontSizeSlider.addEventListener('input', (e) => this._updateFontSize(e.target.value));
 
         // THEME MANAGEMENT
         document.getElementById('download-theme-btn').addEventListener('click', () => this.downloadCurrentTheme());
@@ -116,7 +120,7 @@ export class ThemeManager {
     // ================================================================
 
     _updateModalInputs() {
-        const { colors, fontFamily } = this.cosmeticsData;
+        const { colors, fontFamily, fontSize } = this.cosmeticsData;
         this.colorPickers.forEach(input => {
             //@ts-ignore
             const cssVar = input.dataset.cssVar;
@@ -125,6 +129,9 @@ export class ThemeManager {
         });
         //@ts-ignore
         this.fontInput.value = fontFamily;
+        this.fontSizeSlider.value = fontSize || 16; 
+        this.fontSizeValue.textContent = `${fontSize || 16}px`; 
+        
     }
 
     async _renderThemeList() {
@@ -162,6 +169,18 @@ export class ThemeManager {
             // Add the finished item to the list
             this.themeList.appendChild(clone);
         });
+    }
+
+    /**
+ * Updates the base font size, applies it, and saves.
+ * @param {string} size - The new font size in pixels.
+ */
+    _updateFontSize(size) {
+        this.cosmeticsData.fontSize = parseInt(size, 10);
+        this.cosmeticsData.themeName = null; // Mark theme as modified
+        this.fontSizeValue.textContent = `${size}px`;
+        this.applyCosmetics();
+        this.debouncedSave();
     }
 
     async _handleResetCosmetics() {
@@ -267,6 +286,7 @@ export class ThemeManager {
             data = {
                 id: ThemeManager.COSMETICS_KEY,
                 fontFamily: 'Wellfleet',
+                fontSize: 16,
                 colors: {
                     '--background-color': '#f7fafc',
                     '--panel-color': '#e3f0ff',
@@ -291,7 +311,7 @@ export class ThemeManager {
         if (!this.cosmeticsData) return;
 
         const root = document.documentElement;
-        const { colors, fontFamily } = this.cosmeticsData;
+        const { colors, fontFamily, fontSize } = this.cosmeticsData;
 
         // Apply base colors
         for (const [key, value] of Object.entries(colors)) {
@@ -317,6 +337,7 @@ export class ThemeManager {
         // Apply font
         loadGoogleFonts([fontFamily]);
         root.style.setProperty('--font-family-primary', `'${fontFamily}', sans-serif`);
+        root.style.setProperty('--base-font-size', `${fontSize || 16}px`);
     }
 
     /**
@@ -427,6 +448,7 @@ export class ThemeManager {
         allThemes[themeId] = {
             name: themeName,
             fontFamily: this.cosmeticsData.fontFamily,
+            fontSize: this.cosmeticsData.fontSize,
             colors: this.cosmeticsData.colors
         };
 
@@ -467,6 +489,7 @@ export class ThemeManager {
         // Overwrite the current in-memory theme
         this.cosmeticsData.colors = themeToApply.colors;
         this.cosmeticsData.fontFamily = themeToApply.fontFamily;
+        this.cosmeticsData.fontSize = themeToApply.fontSize;
 
         this.applyCosmetics();
         await this.saveCurrentCosmetics(); // Save the newly applied theme to this board

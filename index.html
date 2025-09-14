@@ -207,29 +207,19 @@
     <div id="control-dock">
         <div id="add-card-dock" class="control-dock-card left">
             <h4 class="dock-card-title">Add Card</h4>
-            <p style="text-align:center">(Click and Drag!)</p>
+            <p style="text-align:center">(Drag to Grid)</p>
             <div class="dock-card-content">
-                
             </div>
         </div>
-        <div id="layout-board-dock" class="control-dock-card middle">
-            <h4 class="dock-card-title">Layout & Boards</h4>
+        <div id="manage-dock" class="control-dock-card right">
+            <h4 class="dock-card-title">Manage Board</h4>
             <div class="dock-card-content">
-                <button id="rearrange-mode-btn">Rearrange</button>
-                <button id="switch-board-btn" class="accent-color">Switch Board</button>    
-                <button id="cosmetics-btn">Cosmetics</button>
-            </div>
-        </div>
-        <div id="settings-data-dock" class="control-dock-card right">
-            <h4 class="dock-card-title">Settings & Data</h4>
-            <div class="dock-card-content">
+                <button id="rearrange-mode-btn" class="highlight-color">Rearrange</button>
+                <button id="switch-board-btn" class="accent-color">Switch Board</button>
+                <button id="cosmetics-btn" class="background-color">Cosmetics</button>
                 <button id="db-manager-btn" class="primary-color">Storage</button>
-                <button id="upload-config-btn">Upload</button>
-                <button id="download-config-btn" class="highlight-color">Download</button>
             </div>
         </div>
-                        <input type="file" id="upload-config-input" accept="application/json" style="display: none;">
-
     </div>
 
     <!-- STORAGE/DATABASE MANAGER MODAL -->
@@ -280,10 +270,15 @@
             <div class="modal-header">
                 <h3>Switch Soundboard</h3>
             </div>
+
+            
+
             <div class="modal-section">
                 <ul id="board-list" class="file-list">
                 </ul>
             </div>
+
+            
 
             <div class="modal-section" style="border-top: 1px solid var(--secondary-color); padding-top: 1.5rem;">
                 <h4>Create New Board</h4>
@@ -291,6 +286,12 @@
                     <input type="text" id="new-board-name-input" placeholder="New board name...">
                     <button id="create-new-board-btn">Create</button>
                 </div>
+            </div>
+
+            <div class="color-palette-buttons">
+                <button id="upload-board-btn" class="accent-color">Upload Board</button>
+                <button id="download-board-btn" class="highlight-color">Download Current</button>
+                <input type="file" id="upload-board-input" accept="application/json" style="display: none;">
             </div>
 
         </div>
@@ -305,12 +306,20 @@
                 <input type="text" id="font-input" placeholder="Wellfleet">
                 <small>You can use any font from <a href="https://fonts.google.com/" target="_blank"
                         rel="noopener noreferrer">Google
-                        Fonts</a>.</small>
+                        Fonts</a>. (Case-sensitive)</small>
+
+                <div class="slider-group" style="margin-top: 1rem;">
+                    <label for="font-size-slider">Size:</label>
+                    <input type="range" id="font-size-slider" min="12" max="24" step="1" value="16">
+                    <span id="font-size-value" style="min-width: 40px; text-align: right;">16px</span>
+                </div>
             </div>
+    
+    
             <div class="modal-section">
                 <h4>Color Palette</h4>
                 <div class="color-palette-grid">
-
+    
                     <div class="color-box">
                         <input type="color" id="primary-color-picker" data-css-var="--primary-color">
                         <label for="primary-color-picker" style="color:var(--primary-color-text)">Dark Text</label>
@@ -325,8 +334,7 @@
                     </div>
                     <div class="color-box">
                         <input type="color" id="background-color-picker" data-css-var="--background-color">
-                        <label for="background-color-picker"
-                            style="color:var(--background-color-text)">Background</label>
+                        <label for="background-color-picker" style="color:var(--background-color-text)">Background</label>
                     </div>
                     <div class="color-box">
                         <input type="color" id="accent-color-picker" data-css-var="--accent-color">
@@ -336,13 +344,13 @@
                         <input type="color" id="highlight-color-picker" data-css-var="--highlight-color">
                         <label for="highlight-color-picker" style="color:var(--highlight-color-text)">Highlight</label>
                     </div>
-
+    
                     <button id="delete-cosmetics-key-btn" class="danger span-three-columns">Reset Current
                         Appearance</button>
                 </div>
-
+    
             </div>
-
+    
             <div class="modal-section">
                 <h4>Save Current Theme</h4>
                 <div class="title-and-color">
@@ -350,14 +358,14 @@
                     <button id="save-theme-btn" class="accent-color" style="padding: 0.5rem 1rem;">Save</button>
                 </div>
             </div>
-
+    
             <div class="modal-section">
                 <h4>My Themes</h4>
                 <ul id="theme-library-list" class="file-list">
                     <li><small>No saved themes yet.</small></li>
                 </ul>
             </div>
-
+    
             <div class="modal-section">
                 <h4>Manage Themes</h4>
                 <div class="color-palette-buttons">
@@ -368,12 +376,12 @@
                     </div>
                     <button id="download-library-btn" class="accent-color">Download Library</button>
                     <button id="upload-library-btn" class="highlight-color">Upload Library</button>
-
+    
                 </div>
                 <input type="file" id="upload-theme-input" accept="application/json" style="display: none;">
                 <input type="file" id="upload-themelibrary-input" accept="application/json" style="display: none;">
             </div>
-
+    
         </div>
     </div>
 

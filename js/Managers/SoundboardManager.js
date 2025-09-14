@@ -7,8 +7,7 @@ import { ThemeManager } from './ThemeManager.js';
 import { CardRegistry } from '../Core/CardRegistry.js';
 import { ControlDockManager } from './ControlDockManager.js';
 import {
-    getAudioDuration, arrayBufferToBase64, base64ToArrayBuffer,
-    loadGoogleFonts, slugify, formatIdAsTitle, formatBytes,
+    getAudioDuration, formatIdAsTitle, formatBytes,
     debounce
 } from '../Core/helper-functions.js';
 
@@ -44,10 +43,8 @@ export class SoundboardManager {
             handleCardCommand: (command) => this.handleCardCommand(command),
             handleCardMigration: (task) => this.handleCardMigration(task),
             toggleRearrangeMode: () => this.toggleRearrangeMode(),
-            downloadConfig: () => this.downloadConfig(),
-            uploadConfig: () => document.getElementById('upload-config-input').click(),
             openThemeManager: () => this.themeManager.open(),
-            openDbManager: () => this.showDbManagerModal(),
+            openDbManager: () => this.dbManager.open(),
             openBoardManager: () => this.boardManager.open(),
             isRearranging: () => this.getRearrangeMode(),
             getLayout: () => this.layout,
@@ -59,11 +56,12 @@ export class SoundboardManager {
 
     // #region Lifecycle
 
-    setDependencies({ themeManager, gridManager, controlDockManager, boardManager, cardRegistry }) {
+    setDependencies({ themeManager, gridManager, controlDockManager, boardManager, dbManager, cardRegistry }) {
         this.themeManager = themeManager;
         this.gridManager = gridManager;
         this.controlDock = controlDockManager;
         this.boardManager = boardManager;
+        this.dbManager = dbManager;
         this.cardRegistry = cardRegistry;
     }
 
@@ -318,13 +316,15 @@ export class SoundboardManager {
         return this.gridManager.isRearranging;
     }
 
-    showConfirmModal(message) {
+    showConfirmModal(message, btnYesText = 'Yes', btnNoText = 'No') {
         return new Promise(resolve => {
             const modal = document.getElementById('confirm-modal');
             const messageEl = document.getElementById('confirm-modal-message');
             const yesBtn = document.getElementById('confirm-yes-btn');
             const noBtn = document.getElementById('confirm-no-btn');
             messageEl.textContent = message;
+            yesBtn.textContent = btnYesText;
+            noBtn.textContent = btnNoText;
             const handler = (e) => {
                 if (e.target === yesBtn) resolve(true);
                 else if (e.target === noBtn) resolve(false);
@@ -339,132 +339,10 @@ export class SoundboardManager {
         });
     }
 
-    async showDbManagerModal() {
-        this.updateDbStats();
-        this.updateDbFileList();
-
-        /**@ts-ignore @type {HTMLInputElement} */
-        const checkbox = document.getElementById('persistent-storage-checkbox');
-        const clearDbBtn = document.getElementById('clear-database-btn');
-        const boardId = this.db.boardId;
-
-        if (boardId === 'default') {
-            clearDbBtn.textContent = 'Reset Default Board...';
-        } else {
-            clearDbBtn.textContent = `Delete '${boardId}' Board...`;
-        }
-
-        // The persistent storage option may never work, and might not need to exist?
-        if (navigator.storage && navigator.storage.persisted) {
-            checkbox.parentElement.style.display = '';
-            const isPersisted = await navigator.storage.persisted();
-            checkbox.checked = isPersisted;
-            checkbox.disabled = isPersisted;
-        } else {
-            // If the API isn't supported, hide the option entirely.
-            checkbox.parentElement.style.display = 'none';
-        }
-
-
-        document.getElementById('db-manager-modal').style.display = 'flex';
-    }
-
-    closeDbManagerModal() {
-        document.getElementById('db-manager-modal').style.display = 'none';
-    }
     // #endregion
 
     // #region Data Management
-    async downloadConfig() {
-        const allData = await this.db.getAll();
-        const soundboardTitle = document.getElementById('soundboard-title').textContent.trim();
-        const serializableData = allData.map(item => {
-            if (item.files && item.files.length > 0) {
-                const serializableFiles = item.files.map(file => ({ ...file, arrayBuffer: arrayBufferToBase64(file.arrayBuffer) }));
-                return { ...item, files: serializableFiles };
-            }
-            return item;
-        });
-        const json = JSON.stringify(serializableData, null, 2);
-        const blob = new Blob([json], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${Date.now()}_${soundboardTitle}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    }
-
-    async uploadConfig(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                //@ts-ignore
-                let data = JSON.parse(e.target.result);
-
-                // migration logic for legacy users
-                if (data.length > 0 && typeof data[0].id === 'number') {
-                    console.log("Old configuration file detected. Migrating to new format...");
-                    data = this.migrateAndSeparateConfig(data);
-                }
-                const confirmed = await this.showConfirmModal("This will overwrite your current soundboard configuration. Are you sure?");
-                if (confirmed) {
-                    const deserializedData = data.map(item => {
-                        if (item.files && item.files.length > 0) {
-                            const deserializedFiles = item.files.map(file => ({ ...file, arrayBuffer: base64ToArrayBuffer(file.arrayBuffer) }));
-                            return { ...item, files: deserializedFiles };
-                        }
-                        return item;
-                    });
-
-                    await this.db.clear();
-                    for (const item of deserializedData) {
-                        await this.db.save(item.id, item);
-                    }
-
-                    await this._loadBoardData();
-                    alert("Configuration uploaded successfully!");
-                    window.location.reload();
-                }
-            } catch (e) {
-                alert("Failed to read file. Please ensure it is a valid JSON configuration file.");
-                console.error("Upload error:", e);
-            }
-        };
-        reader.readAsText(file);
-    }
-
-    async createNewBoard() {
-        // @ts-ignore
-        const input = document.getElementById('new-board-name-input');
-        if (input == null) { return; }
-        //@ts-ignore
-        const boardName = input.value.trim();
-
-        if (!boardName) {
-            alert("Please enter a name for the new board.");
-            return;
-        }
-
-        const boardId = slugify(boardName);
-        if (!boardId) {
-            alert("Please enter a valid name (letters and numbers).");
-            return;
-        }
-
-        const existingBoardIds = await BoardManager.getBoardList(); // UPDATED
-        if (existingBoardIds.includes(boardId)) {
-            alert(`A board with the ID "${boardId}" already exists.`);
-            return;
-        }
-
-        window.location.href = `?board=${boardId}`;
-    }
-
+    
     // Maybe this should be in BoardManager.js?
     async loadTitle() {
         const titleData = await this.db.get('soundboard-title');
@@ -482,97 +360,7 @@ export class SoundboardManager {
         }
     }
 
-    // dunno if this does anything really
-    async requestPersistentStorage() {
-        if (navigator.storage && navigator.storage.persist) {
-            const isPersisted = await navigator.storage.persisted();
-            if (!isPersisted) {
-                const granted = await navigator.storage.persist();
-                if (granted) {
-                    console.log("Persistent storage granted!");
-                } else {
-                    console.log("Persistent storage denied.");
-                }
-            } else {
-                console.log("Persistent storage already granted.");
-            }
-        }
-    }
-
-    async updateDbStats() {
-        const dbSizeEl = document.getElementById('db-usage');
-        const dbQuotaEl = document.getElementById('db-quota');
-        const dbButtonCountEl = document.getElementById('db-button-count');
-
-        const soundData = (await this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll')).filter(c => c.type === 'sound');
-        dbButtonCountEl.textContent = soundData.length;
-
-        if (navigator.storage && navigator.storage.estimate) {
-            const { quota, usage } = await navigator.storage.estimate();
-            dbSizeEl.textContent = formatBytes(usage);
-            dbQuotaEl.textContent = formatBytes(quota);
-        } else {
-            dbSizeEl.textContent = 'N/A';
-            dbQuotaEl.textContent = 'N/A';
-        }
-    }
-
-    async updateDbFileList() {
-        const fileListEl = document.getElementById('db-file-list');
-        const soundData = (await this.db._dbRequest(this.db.CARDS_STORE, 'readonly', 'getAll')).filter(c => c.type === 'sound');
-
-        fileListEl.innerHTML = '';
-        if (soundData.length === 0) {
-            fileListEl.innerHTML = '<li><small>No sounds found.</small></li>';
-            return;
-        }
-
-        soundData.forEach(item => {
-            const li = document.createElement('li');
-            li.textContent = `Button "${item.title}": ${item.files.length} file(s)`;
-            fileListEl.appendChild(li);
-        });
-    }
-
-    async handleClearDatabase() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const boardId = urlParams.get('board') || 'default';
-
-        if (boardId === 'default') {
-            // --- NEW LOGIC FOR WIPING THE DEFAULT BOARD ---
-            const confirmed = await this.showConfirmModal("This will wipe all cards and settings from the default board but will PRESERVE your list of other boards. Are you sure?");
-            if (confirmed) {
-                try {
-                    // 1. Read the board list and keep it in memory.
-                    const boardList = await BoardManager.getBoardList();
-
-                    // 2. Clear both object stores completely.
-                    await this.db.clear();
-
-                    // 3. Write the board list back to the now-empty database.
-                    await BoardManager.saveBoardList(boardList);
-
-                    // 4. Reload the page to show the fresh default board.
-                    window.location.reload();
-
-                } catch (e) {
-                    console.error("Failed to wipe default board:", e);
-                }
-            }
-        } else {
-            // --- EXISTING LOGIC FOR DELETING OTHER BOARDS ---
-            const confirmed = await this.showConfirmModal(`This will permanently delete the entire "${boardId}" board. Are you sure?`);
-            if (confirmed) {
-                try {
-                    await this.db.clear();
-                    await BoardManager.removeBoardId(boardId);
-                    window.location.href = window.location.pathname;
-                } catch (e) {
-                    console.error("Failed to clear database:", e);
-                }
-            }
-        }
-    }
+  
     // #endregion
 
     // #region Event Listeners
@@ -599,9 +387,6 @@ export class SoundboardManager {
     // GLOBAL EVENT LISTENERS
     _attachGlobalEventListeners() {
 
-        // for uploading configs
-        document.getElementById('upload-config-input').addEventListener('change', (e) => this.uploadConfig(e));
-
         // SOUNDBOARD TITLE
         document.getElementById('soundboard-title').addEventListener('blur', (e) => {
             //@ts-ignore
@@ -609,33 +394,6 @@ export class SoundboardManager {
             document.title = newTitle + " | B&M RSS";
             this.db.save('soundboard-title', { id: 'soundboard-title', title: newTitle });
         });
-
-        
-
-        // listener to close the board switcher modal when clicking the background
-        document.getElementById('board-switcher-modal').addEventListener('click', (event) => {
-            //@ts-ignore
-            if (event.target.id === 'board-switcher-modal') {
-                document.getElementById('board-switcher-modal').style.display = 'none';
-            }
-        });
-
-        // CLOSE DB MANAGER MODAL WHEN CLICKING BACKGROUND
-        document.getElementById('db-manager-modal').addEventListener('click', (event) => {
-            //@ts-ignore
-            if (event.target.id === 'db-manager-modal') this.closeDbManagerModal();
-        });
-
-        document.getElementById('persistent-storage-checkbox').addEventListener('change', (e) => {
-            //@ts-ignore
-            if (e.target.checked) {
-                this.requestPersistentStorage();
-            }
-            // Note: Browsers do not currently allow you to programmatically "un-persist" storage.
-            // The user must do this through browser settings. This also might not work at all lol.
-        });
-        document.getElementById('clear-database-btn').addEventListener('click', () => this.handleClearDatabase());
-
 
 
         // HELPFUL BUG
@@ -718,79 +476,6 @@ export class SoundboardManager {
 
         // Process the next item on a brief timeout to keep the UI responsive
         setTimeout(() => this._processMigrationQueue(), 100);
-    }
-
-
-    /**
-     * Detects an old configuration format and migrates it to the new structure.
-     * It separates cards from config items and updates their data models.
-     * @param {Array<Object>} oldData - The raw data array from the old JSON file.
-     * @returns {Array<Object>} A new array with data in the modern format.
-     */
-    migrateAndSeparateConfig(oldData) {
-        const migratedData = [];
-        const idMap = new Map(); // To track old numeric IDs and their new prefixed string IDs
-
-        // First pass: Process all cards and create an ID map
-        oldData.forEach(item => {
-            let newItem = { ...item }; // Start with a copy
-
-            // --- Migrate Sound Cards ---
-            if (typeof item.id === 'number' && item.files) {
-                const newId = `sound-${item.id}`;
-                // Use a composite key to avoid collisions: "sound-0"
-                idMap.set(`sound-${item.id}`, newId);
-                newItem = {
-                    ...CardRegistry.SoundCard.Default(),
-                    ...item,
-                    id: newId,
-                    title: item.name,
-                    type: 'sound'
-                };
-                delete newItem.name;
-            }
-            // --- Migrate Timer Cards ---
-            else if (item.id.startsWith && item.id.startsWith('timer-')) {
-                const oldIdNumeric = item.id.split('-')[1];
-                // Use a composite key: "timer-0"
-                idMap.set(`timer-${oldIdNumeric}`, item.id);
-                newItem = {
-                    ...CardRegistry.TimerCard.Default(),
-                    ...item,
-                    type: 'timer',
-                    startAction: { command: item.startSound || "", durationMs: 0, triggered: false },
-                    endAction: { command: item.endSound || "", durationMs: item.endSoundDuration || 0, triggered: false }
-                };
-                // Clean up old properties
-                delete newItem.startSoundId; delete newItem.endSoundId; delete newItem.endSoundDuration;
-                delete newItem.startSound; delete newItem.endSound;
-            }
-            // --- Migrate Notepad Cards ---
-            else if (item.id.startsWith && item.id.startsWith('notepad-')) {
-                const oldIdNumeric = item.id.split('-')[1];
-                // Use a composite key: "notepad-0"
-                idMap.set(`notepad-${oldIdNumeric}`, item.id);
-                newItem = { ...CardRegistry.NotepadCard.Default(), ...item, type: 'notepad' };
-            }
-
-            migratedData.push(newItem);
-        });
-
-        // Second pass: Update the grid-layout with the new IDs
-        const gridLayoutItem = migratedData.find(item => item.id === 'grid-layout');
-        if (gridLayoutItem) {
-            gridLayoutItem.layout = gridLayoutItem.layout.map(layoutItem => {
-                // Look up using the same composite key structure
-                const newId = idMap.get(`${layoutItem.type}-${layoutItem.id}`);
-                if (newId) {
-                    return { ...layoutItem, id: newId };
-                }
-                return layoutItem; // Keep items like 'control-card' as is
-            });
-        }
-
-        // Filter out any non-card config items that were processed in the first pass
-        return migratedData.filter(item => item.type || item.id === 'grid-layout' || item.id === 'soundboard-title');
     }
     // #endregion
 

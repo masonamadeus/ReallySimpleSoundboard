@@ -5,6 +5,7 @@ import { ThemeManager } from './Managers/ThemeManager.js';
 import { GridManager } from './Managers/LayoutManager.js';
 import { ControlDockManager } from './Managers/ControlDockManager.js';
 import { BoardManager } from './Managers/BoardManager.js';
+import { DbManager } from './Managers/DbManager.js';   
 
 // EVENTUALLY NEED TO MAKE IT SO THERE DO NOT NEED TO BE EXPLICIT REFS TO IMPORT CARD TYPES
 import { SoundCard } from './Cards/SoundCard.js';
@@ -72,6 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const gridManager = new GridManager(soundboardManager.managerAPI);
     const controlDockManager = new ControlDockManager(soundboardManager.managerAPI);
     const boardManager = new BoardManager(soundboardManager.managerAPI);
+    const dbManager = new DbManager(soundboardManager.managerAPI);
 
     // 2. Set the SoundboardManager's dependencies so it knows about the UI managers
     soundboardManager.setDependencies({
@@ -83,10 +85,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // 3. Initialize all UI managers so they are ready to listen for events
-    await themeManager.init(db, new SoundboardDB('default'));
-    await boardManager.init(document.getElementById('board-switcher-modal'), document.getElementById('board-list'));
-    await gridManager.init(document.getElementById('soundboard-grid'), document.getElementById('control-dock'));
-    await controlDockManager.init(document.getElementById('control-dock'), document.querySelectorAll('.control-dock-card'), cardRegistry);
+    await themeManager.init(
+        db,
+        new SoundboardDB('default'),
+    );
+
+    await dbManager.init(
+        db,
+    );
+
+    await boardManager.init(
+        document.getElementById('board-switcher-modal'), 
+        document.getElementById('board-list'),
+        document.getElementById('upload-board-input'),
+    );
+
+    await gridManager.init(
+        document.getElementById('soundboard-grid'), 
+        document.getElementById('control-dock')
+    );
+
+    await controlDockManager.init(
+        document.getElementById('control-dock'), 
+        document.querySelectorAll('.control-dock-card'), 
+        cardRegistry);
 
     // 4. NOW, load the data. The UI managers are ready to catch the events.
     await soundboardManager.load();

@@ -27,8 +27,6 @@ export class ControlDockManager {
     _getDOMLemons() {
         this.elements = {
             rearrangeBtn: document.getElementById('rearrange-mode-btn'),
-            downloadConfigBtn: document.getElementById('download-config-btn'),
-            uploadConfigBtn: document.getElementById('upload-config-btn'),
             cosmeticsBtn: document.getElementById('cosmetics-btn'),
             storageBtn: document.getElementById('db-manager-btn'),
             switchBoardBtn: document.getElementById('switch-board-btn'),
@@ -74,8 +72,6 @@ export class ControlDockManager {
 
         // --- Relocated Button Listeners ---
         this.elements.rearrangeBtn.addEventListener('click', () => this.manager.toggleRearrangeMode());
-        this.elements.downloadConfigBtn.addEventListener('click', () => this.manager.downloadConfig());
-        this.elements.uploadConfigBtn.addEventListener('click', () => this.manager.uploadConfig());
         this.elements.cosmeticsBtn.addEventListener('click', () => this.manager.openThemeManager());
         this.elements.storageBtn.addEventListener('click', () => this.manager.openDbManager());
         this.elements.switchBoardBtn.addEventListener('click', () => this.manager.openBoardManager());

@@ -29,6 +29,8 @@ export class EventManager {
             REQUEST_MOVE_CARD: 'request:moveCard',
             REQUEST_RESIZE_CARD: 'request:resizeCard',
             REQUEST_UPDATE_CARD_DATA: 'request:updateCardData',
+            REQUEST_SWITCH_BOARD: 'request:switchBoard',
+            
         };
 
 
