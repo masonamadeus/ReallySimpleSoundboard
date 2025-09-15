@@ -598,13 +598,11 @@ input[type="range"]::-moz-range-thumb {
 
 
 .timer-title {
-    font-size: 1.5rem;
+    font-size: 1.4rem;
     font-weight: bold;
     text-align: center;
     color: var(--panel-color-text);
-    border: 2px solid transparent;
     width: 90%;
-    padding: 0.5rem;
     transition: border-color 0.2s ease;
 }
 
