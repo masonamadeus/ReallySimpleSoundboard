@@ -26,6 +26,7 @@ export class NotepadCard extends Card {
         this.deletePageButton = this.cardElement.querySelector('.delete-page-btn');
 
         this.debouncedSaveContent = debounce(() => this.saveContent(), 300);
+        this.boundCloseDropdown = this._closeDropdownOnClickOutside.bind(this);
 
         this._initialize();
     }
@@ -75,12 +76,13 @@ export class NotepadCard extends Card {
         });
 
         // Close dropdown if user clicks outside of it
-        document.addEventListener('click', (e) => {
-            //@ts-ignore
-            if (!this.dropdown.contains(e.target)) {
-                this.dropdown.classList.remove('open');
-            }
-        });
+        document.addEventListener('click', this.boundCloseDropdown);
+    }
+
+    _closeDropdownOnClickOutside(e) {
+        if (!this.dropdown.contains(e.target)) {
+            this.dropdown.classList.remove('open');
+        }
     }
     
     // --- Data Management Methods ---
@@ -170,6 +172,11 @@ export class NotepadCard extends Card {
         addOption.className = 'add-page-option';
         addOption.textContent = 'Add New Page...';
         this.dropdownList.appendChild(addOption);
+    }
+
+    destroy() {
+        document.removeEventListener('click', this.boundCloseDropdown)
+        super.destroy();
     }
 }
 

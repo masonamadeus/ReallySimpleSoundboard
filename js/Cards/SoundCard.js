@@ -551,7 +551,7 @@ export class SoundCard extends Card {
                 this.data.files.push(fileData);
             }
             await this.updateData({ files: this.data.files });
-            modal.refreshContent(); // Re-render the modal to show the new file list
+            modal.refresh('files', this.data); // Re-render the modal to show the new file list
         };
         fileInput.click();
     }
@@ -560,7 +560,7 @@ export class SoundCard extends Card {
         this.player.stop();
         this.data.files.splice(index, 1);
         await this.updateData({ files: this.data.files });
-        modal.refreshContent();
+        modal.refresh('files', this.data);
     }
 
     async _handleClearFiles(modal) {
@@ -568,7 +568,7 @@ export class SoundCard extends Card {
         if (confirmed) {
             this.player.stop();
             await this.updateData({ files: [] });
-            modal.refreshContent();
+            modal.refresh('files', this.data)
         }
     }
 

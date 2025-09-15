@@ -32,6 +32,7 @@ export function reducer(state, action) {
             // Return a new state object with the new data structures
             return { ...state, allCards: newAllCards, layout: newLayout };
         }
+        
 
         // CARD REMOVED
         case MSG.is.CARD_REMOVED: {

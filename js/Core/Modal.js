@@ -317,9 +317,44 @@ export class Modal {
     }
 
     // Public method to allow external code to refresh parts of the modal
-    refreshContent() {
+    rebuild() {
         this.modalElement.querySelector('.modal-form-content').innerHTML = '';
         this._buildForm();
+    }
+
+    refresh(controlKey, data) {
+        // Find the specific control element in the modal to refresh
+        const controlToRefresh = this.modalElement.querySelector(`[data-key="${controlKey}"]`);
+        if (!controlToRefresh) return;
+
+        // Find the parent group of the control
+        const groupEl = controlToRefresh.closest('.modal-form-group');
+        if (!groupEl) return;
+
+        // Find the control's configuration from the original config object
+        let controlConfig = null;
+        for (const section of this.config) {
+            for (const group of section.groups) {
+                const foundControl = group.controls.find(c => c.key === controlKey || c.itemSource === controlKey);
+                if (foundControl) {
+                    controlConfig = foundControl;
+                    break;
+                }
+            }
+            if (controlConfig) break;
+        }
+
+        if (!controlConfig) return;
+
+        // Update the modal's internal data before redrawing the control
+        this.data = data;
+        
+        // Create the new, updated control element
+        const newControlEl = this._createControl(controlConfig, groupEl);
+
+        // Replace the old control's container with the new one
+        const parentContainer = controlToRefresh.parentElement;
+        parentContainer.replaceWith(newControlEl);
     }
 
     open() {

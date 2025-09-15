@@ -48,6 +48,7 @@ export class Card {
         this.id = this.data.id;
 
         this.cardElement = this._createElement();
+        this.settingsModal = null;
 
         // INIT COMMAND LOGIC
         this.commands = []; // THIS card's commands
@@ -105,9 +106,13 @@ export class Card {
 
 
     /**
-     * Placeholder for cleanup logic (e.g., stopping timers or audio).
+     * Child classes must call super.destroy() if they override this method.
      */
     destroy() {
+        if (this.settingsModal) {
+            this.settingsModal.close();
+            this.settingsModal = null; // Clear the reference
+        }
     }
 
     //#endregion
@@ -132,7 +137,7 @@ export class Card {
             return string.charAt(0).toUpperCase() + string.slice(1);
         };
         const modalTitle = `${capitalizeFirstLetter(this.data.type)} Settings`;
-        const modal = new Modal(
+        this.settingsModal = new Modal(
             modalTitle,
             config,
             this.data,
@@ -140,7 +145,7 @@ export class Card {
             this.allCommands,
             (newData) => this._onSettingsSave(newData) // Pass the updateData method as the save callback
         );
-        modal.open();
+        this.settingsModal.open();
     }
 
     /**
@@ -304,6 +309,7 @@ export class Card {
 
     // Helper method to handle card deletion
     async _handleDeleteCard() {
+        this._closeSettingsModal?.();
         MSG.say(MSG.ACTIONS.REQUEST_REMOVE_CARD, { cardId: this.data.id })
 
     }

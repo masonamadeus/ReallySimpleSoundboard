@@ -119,7 +119,7 @@ export class SoundboardManager {
                 payload: { layout }
             });
 
-            await this.saveLayout(layout);
+            await this.saveLayout(store.getState().layout);
         }
     }
 
@@ -134,7 +134,7 @@ export class SoundboardManager {
                 payload: { layout }
             });
             
-            await this.saveLayout(layout);
+            await this.saveLayout(store.getState().layout);
         }
     }
 

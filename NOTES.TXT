@@ -7,6 +7,9 @@ SOUNDBOARD OVERALL ================
 - Make modular reusable modal elements for card settings instead of reinventing every modal
 - move logic for upload/download "config" to "upload/download board" and put in boardmanager
 - allow ingest of old soundboard presets with proper migration
+- picture in picture
+- drag and drop broken
+- modals not wokring
 
 NOTEPAD CARDS =====================
 - Spell check

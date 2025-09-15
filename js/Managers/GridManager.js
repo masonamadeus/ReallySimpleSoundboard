@@ -55,7 +55,7 @@ export class GridManager {
             const cardInstance = this.allCards.get(node.id);
             if (cardInstance) {
                 const cardElement = cardInstance.cardElement;
-                cardElement.setAttribute('draggable', this.isRearranging);
+                cardElement.setAttribute('draggable', store.getState().isRearranging);
                 cardElement.style.gridColumn = `span ${node.gridSpan.column}`;
                 cardElement.style.gridRow = `span ${node.gridSpan.row}`;
                 return cardElement;
@@ -77,7 +77,6 @@ export class GridManager {
     }
 
     setRearrangeMode(isEnabled) {
-        this.isRearranging = isEnabled;
         this.gridContainer.classList.toggle('rearrange-mode', isEnabled);
 
         const { allCards } = store.getState();
@@ -129,6 +128,7 @@ export class GridManager {
     _handleDragStart(e) {
         const stickerElement = e.target.closest('.sticker-container .sound-card');
         const cardElement = e.target.closest('#soundboard-grid .sound-card');
+        const isRearranging = store.getState().isRearranging;
 
         if (stickerElement) {
             const newCardType = stickerElement.dataset.cardType;
@@ -137,7 +137,7 @@ export class GridManager {
             e.dataTransfer.setData('application/new-card-type', newCardType);
             this.placeholder.style.gridColumn = 'span 1';
             this.placeholder.style.gridRow = 'span 1';
-        } else if (this.isRearranging && cardElement) {
+        } else if (store.getState().isRearranging && cardElement) {
             this.draggedItem = { element: cardElement, dragMode: 'reorder', payload: cardElement.dataset.cardId };
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', this.draggedItem.payload);
@@ -162,12 +162,16 @@ export class GridManager {
                 cardElement.classList.add('grid-item-dragging');
             }, 0);
         }
+
+        
     }
 
     _handleDragOver(e) {
         e.preventDefault();
         if (!this.draggedItem.dragMode) return;
-        const overElement = e.target.closest('.sound-card:not(.grid-item-dragging)');
+        
+        const overElement = e.target.closest('.sound-card:not(.grid-item-dragging)') ||
+                            e.target.closest('.interaction-shield')?.parentElement;
         const container = e.target.closest('.layout-container, #soundboard-grid');
         if (overElement) {
             const rect = overElement.getBoundingClientRect();
@@ -186,6 +190,12 @@ export class GridManager {
         const targetParentId = parentElement.dataset.containerId || 'root';
         const children = Array.from(parentElement.children).filter(child => !child.classList.contains('grid-item-dragging'));
         const placeholderIndex = children.indexOf(this.placeholder);
+        console.log('Drop:', {
+        dragMode: this.draggedItem.dragMode,
+        targetParentId,
+        placeholderIndex,
+        payload: this.draggedItem.payload
+    });
 
         this.placeholder.remove();
 
