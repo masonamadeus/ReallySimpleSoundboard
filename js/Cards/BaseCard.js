@@ -127,13 +127,37 @@ export class Card {
 
         // The Modal takes the title, the config object, the card's current data,
         // and a callback function to save the updated data.
+        const capitalizeFirstLetter = (string) => {
+            if (!string) return '';
+            return string.charAt(0).toUpperCase() + string.slice(1);
+        };
+        const modalTitle = `${capitalizeFirstLetter(this.data.type)} Settings`;
         const modal = new Modal(
-            `${this.data.title} Settings`,
+            modalTitle,
             config,
             this.data,
-            (newData) => this.updateData(newData) // Pass the updateData method as the save callback
+            this.commands,
+            this.allCommands,
+            (newData) => this._onSettingsSave(newData) // Pass the updateData method as the save callback
         );
         modal.open();
+    }
+
+    /**
+    *
+    * The base implementation calls updateData with the new data.
+    * @param {object} newData The fresh data from the modal.
+    */
+    _onSettingsSave(newData){
+        this.updateData(newData);
+    }
+
+    /**
+ * Child cards MUST implement this if they have settings.
+ * @returns {object | null} The configuration object for the modal.
+ */
+    getSettingsConfig() {
+        throw new error('Child class must implement getSettingsConfig method if they have settings.');
     }
 
     //#endregion

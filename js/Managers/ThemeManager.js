@@ -18,6 +18,7 @@ export class ThemeManager {
         // Data state
         this.cosmeticsData = null;
         this.debouncedSave = debounce(() => this.saveCurrentCosmetics(), 300);
+        this.debouncedUpdateColor = debounce((cssVar, value) => this.updateColor(cssVar, value), 150);
 
         // UI Element References
 
@@ -68,7 +69,7 @@ export class ThemeManager {
 
         this.colorPickers.forEach(input => {
             //@ts-ignore
-            input.addEventListener('input', (e) => this.updateColor(e.target.dataset.cssVar, e.target.value));
+            input.addEventListener('input', (e) => this.debouncedUpdateColor(e.target.dataset.cssVar, e.target.value));
         });
 
         //@ts-ignore FONT INPUTS

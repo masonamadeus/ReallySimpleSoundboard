@@ -78,65 +78,21 @@
             <div class="timer-display">
                 <span>00:00</span>
                 <div class="timer-progress-overlay"></div>
+                <div class="settings-triangle-btn" data-action="settings">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path
+                        d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                </svg>
             </div>
-            <div class="timer-controls">
-                <div class="timer-options-toggle">
-                    <label>
-                        <input type="checkbox" class="hide-timer-options-toggle" value="false">
-                        Lock Timer Settings
-                    </label>
-                </div>
-                <div class="timer-options-container">
-
-
-                    <div class="slider-group">
-                        <label>Minutes:</label>
-                        <input type="range" class="timer-minutes-range" min="0" max="90" value="0">
-                        <input type="number" class="timer-minutes-value" data-type="minutes" min="0" max="90" value="0">
-                    </div>
-                    <div class="slider-group">
-                        <label>Seconds:</label>
-                        <input type="range" class="timer-seconds-range" min="0" max="59" value="30">
-                        <input type="number" class="timer-seconds-value" data-type="seconds" min="0" max="59"
-                            value="30">
-                    </div>
-
-                    <div class="timer-mode-selector">
-                        <label>
-                            <input type="radio" name="timer-mode" class="timer-mode-radio" value="timer" checked> Timer
-                        </label>
-                        <label>
-                            <input type="radio" name="timer-mode" class="timer-mode-radio" value="stopwatch"> Stopwatch
-                        </label>
-                    </div>
-
-                    <div class="timer-sound-select start-action-container">
-                        <label class="start-action-label">Start with:</label>
-                        <select class="timer-start-action"></select>
-                    </div>
-                    <div class="timer-sound-select end-action-container">
-                        <label class="end-action-label">End with:</label>
-                        <select class="timer-end-action"></select>
-                    </div>
-                    <div class="timer-sound-select">
-                        <label>
-                            <input type="checkbox" class="timer-loop-checkbox" style="margin-right: 0.5rem;">Auto
-                            Restart
-                        </label>
-                    </div>
-                </div>
-                <div class="timer-buttons">
-                    <button class="start-pause-timer-btn">Start</button>
-                    <button class="reset-timer-btn">Reset</button>
-                </div>
-
-                <div class="timer-options-container">
-
-                    <button class="remove-timer-btn danger">Remove Timer</button>
-                </div>
             </div>
+            <div class="timer-buttons">
+                <button class="start-pause-timer-btn" data-action="start-pause">Start</button>
+                <button class="reset-timer-btn" data-action="reset">Reset</button>
+            </div>
+            
+            <div class="resize-handle"></div>
         </div>
-    </template>
+    </template
 
     <!-- SOUND CARD TEMPLATE -->
     <template id="sound-card-template">

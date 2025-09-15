@@ -9,6 +9,7 @@ export class GridManager {
         this.gridContainer = null;
         this.controlDock = null;
         this.allCards = null;
+        this.previousLayout = null;
     }
 
     init(gridContainer, controlDock) {
@@ -19,9 +20,15 @@ export class GridManager {
         store.subscribe(() => {
             const { layout, allCards, isRearranging } = store.getState();
             this.allCards = allCards;
-            this.render(layout);
+
+            // Only re-render if the layout object itself has changed
+            if (layout !== this.previousLayout) {
+                this.render(layout);
+                this.previousLayout = layout;
+            }
+
             this.setRearrangeMode(isRearranging);
-        })
+        });
 
     }
 
@@ -248,11 +255,17 @@ export class GridManager {
             const dCol = Math.round(dx / gridColumnWidth);
             const dRow = Math.round(dy / gridRowHeight);
 
-            node.gridSpan.column = Math.max(1, startSpan.column + dCol);
-            node.gridSpan.row = Math.max(1, startSpan.row + dRow);
+            // Calculate the new span, but don't save or re-render the whole grid yet
+            const newColumnSpan = Math.max(1, startSpan.column + dCol);
+            const newRowSpan = Math.max(1, startSpan.row + dRow);
 
-            // Render locally for immediate feedback, but don't save yet
-            this.render(layout);
+            // Update the style of the specific card being resized for instant feedback
+            cardElement.style.gridColumn = `span ${newColumnSpan}`;
+            cardElement.style.gridRow = `span ${newRowSpan}`;
+
+            // Update the node in memory for the final save
+            node.gridSpan.column = newColumnSpan;
+            node.gridSpan.row = newRowSpan;
         };
 
         const onResizeEndHandler = () => onResizeEnd(node);

@@ -1,4 +1,6 @@
 import { Card } from "./BaseCard.js";
+import { MSG } from "../Core/MSG.js";
+import { debounce } from "../Core/helper-functions.js";
 
 export class NotepadCard extends Card {
 
@@ -23,6 +25,8 @@ export class NotepadCard extends Card {
         this.contentElement = this.cardElement.querySelector('.notepad-content');
         this.deletePageButton = this.cardElement.querySelector('.delete-page-btn');
 
+        this.debouncedSaveContent = debounce(() => this.saveContent(), 300);
+
         this._initialize();
     }
 
@@ -37,7 +41,7 @@ export class NotepadCard extends Card {
 
     _attachListeners() {
         // --- Event listeners for the main card content ---
-        this.contentElement.addEventListener('input', () => this.saveContent());
+        this.contentElement.addEventListener('input', () => this.debouncedSaveContent());
         this.deletePageButton.addEventListener('click', () => this.deletePage());
 
         // --- Event listeners for the custom dropdown ---

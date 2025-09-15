@@ -8,12 +8,11 @@ export class TimerCard extends Card {
         return {
             type: 'timer',
             title: 'New Timer',
-            targetDurationMs: 30000, // Changed to 30s default
+            targetDurationMs: 30000, // 30s default
             elapsedMs: 0,
             isRunning: false,
             isLooping: false,
             mode: 'timer',
-            optionsHidden: true,
 
             // --- UNIFIED STATE OBJECTS ---
             startAction: {
@@ -39,90 +38,14 @@ export class TimerCard extends Card {
     constructor(cardData) {
         super(cardData);
 
-        // TITLE AND DISPLAY
-        /** @type {HTMLElement} */
+        // A much shorter list of DOM elements!
         this.timerTitle = this.cardElement.querySelector('.timer-title');
-
-        /** @type {HTMLElement} */
-        this.timerDisplayContainer = this.cardElement.querySelector('.timer-display');
-
-        /** @type {HTMLSpanElement} */
-        this.timerDisplay = this.timerDisplayContainer.querySelector('span');
-
-        /** @type {HTMLElement} */
-        this.timerProgressContainer = this.cardElement.querySelector('.timer-progress-container');
-
-        /** @type {HTMLElement} */
+        this.timerDisplay = this.cardElement.querySelector('.timer-display span');
         this.timerProgressOverlay = this.cardElement.querySelector('.timer-progress-overlay');
-
-        // BUTTONS
-        /** @type {HTMLButtonElement} */// START/PAUSE BUTTON
         this.startPauseBtn = this.cardElement.querySelector('.start-pause-timer-btn');
+        this.animationFrameId = null;
 
-        /** @type {HTMLButtonElement} */// RESET TIMER BUTTON
-        this.resetBtn = this.cardElement.querySelector('.reset-timer-btn');
-
-        /** @type {HTMLInputElement} */// REMOVE TIMER BUTTON
-        this.removeTimerBtn = this.cardElement.querySelector('.remove-timer-btn');
-
-        // SLIDERS & THEIR LABELS
-        /** @type {HTMLInputElement} */
-        this.timerMinutesRange = this.cardElement.querySelector('.timer-minutes-range');
-
-        /** @type {HTMLInputElement} */
-        this.timerMinutesValue = this.cardElement.querySelector('.timer-minutes-value');
-
-        /** @type {HTMLInputElement} */
-        this.timerSecondsRange = this.cardElement.querySelector('.timer-seconds-range');
-
-        /** @type {HTMLInputElement} */
-        this.timerSecondsValue = this.cardElement.querySelector('.timer-seconds-value');
-
-        // TIMER OPTIONS SECTION
-        /** @type {HTMLInputElement} */
-        this.hideOptionsToggle = this.cardElement.querySelector('.hide-timer-options-toggle');
-
-        /** @type {NodeListOf<HTMLElement>} */
-        this.optionsContainers = this.cardElement.querySelectorAll('.timer-options-container');
-
-        /** @type {HTMLInputElement} */
-        this.loopCheckbox = this.cardElement.querySelector('.timer-loop-checkbox');
-
-        /** @type {NodeListOf<HTMLInputElement>} */
-        this.modeRadios = this.cardElement.querySelectorAll('.timer-mode-radio');
-        this.modeRadios.forEach(radio => {
-            radio.name = `timer-mode-${this.id}`;
-        });
-
-
-        // START ACTIONS SECTION
-        /** @type {HTMLElement} */
-        this.startActionContainer = this.cardElement.querySelector('.start-action-container');
-
-        /** @type {HTMLLabelElement} */
-        this.startActionLabel = this.cardElement.querySelector('.start-action-label');
-
-        /** @type {HTMLSelectElement} */
-        this.timerStartActionSelect = this.cardElement.querySelector('.timer-start-action');
-
-
-        // END ACTIONS SECTION
-        /** @type {HTMLElement} */
-        this.endActionContainer = this.cardElement.querySelector('.end-action-container');
-
-        /** @type {HTMLLabelElement} */
-        this.endActionLabel = this.cardElement.querySelector('.end-action-label');
-
-        /** @type {HTMLSelectElement} */
-        this.timerEndActionSelect = this.cardElement.querySelector('.timer-end-action');
-
-
-        // DEBOUNCED SAVE FOR SLIDER VALUES
-        this.debouncedSliderSave = debounce(() => this.handleSliderChange(), 200)
-
-        // BOUND EVENT HANDLER - why?? I forget??
         this.boundHandleButtonDeletion = this.handleButtonDeletion.bind(this);
-
 
         this._initialize();
     }
@@ -141,56 +64,126 @@ export class TimerCard extends Card {
         })
     }
 
-    _initialize(){
+    _initialize() {
         this._attachListeners();
         this.updateUI();
-        if (this.data.isRunning){
-            this.updateData({startTime: Date.now()});
+        if (this.data.isRunning) {
+            this.updateData({ startTime: Date.now() });
             this.tick();
         }
     }
 
-    _attachListeners() {
+    async openSettings() {
+        this._openSettingsModal();
+    }
 
-        // MAIN CARD CONTROL BUTTONS
-        this.startPauseBtn.addEventListener('click', () => this.handlePlayPause());
-        this.resetBtn.addEventListener('click', () => this.reset());
-        this.removeTimerBtn.addEventListener('click', () => this._handleDeleteCard());
+    /**
+    * Overrides the base save hook to handle the specific logic for this card.
+    * This is where we transform the modal's output into savable data.
+    * @param {object} newData The data returned from the modal.
+    */
+     async _onSettingsSave(newData) {
+        const { minutes, seconds, startAction: startActionId, endAction: endActionId, ...cardDataToSave } = newData;
+
+        // Always rebuild the action objects from the command IDs provided by the modal.
+        cardDataToSave.startAction = await this._prepareAction(startActionId);
+        cardDataToSave.endAction = await this._prepareAction(endActionId);
+
+        // Calculate the target duration.
+        cardDataToSave.targetDurationMs = (parseInt(minutes, 10) * 60 + parseInt(seconds, 10)) * 1000;
+
+        // If the mode changed while the timer wasn't running, reset it.
+        if (newData.mode && newData.mode !== this.data.mode && !this.data.isRunning) {
+            this.reset();
+        }
+
+        // Now, we can safely update the data with the fully-formed objects.
+        this.updateData(cardDataToSave);
+    }
 
 
-        // OPTIONS/SETTINGS THAT ARE SIMPLE TOGGLES
-         const immediateChangeControls = [
-            this.hideOptionsToggle,
-            this.loopCheckbox,
+    getSettingsConfig() {
+        return [
+            {
+                title: ``,
+                groups: [
+                    {
+                        type: 'title-and-color',
+                        controls: [
+                            { type: 'text', key: 'title', label: '' }
+                        ]
+                    },
+                    {
+                        type: 'radio-group', // A new group type for the mode
+                        controls: [
+                            {
+                                type: 'radio', key: 'mode', options: [
+                                    { label: 'Timer', value: 'timer' },
+                                    { label: 'Stopwatch', value: 'stopwatch' }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        type: 'sliders',
+                        controls: [
+                            { type: 'range', key: 'minutes', label: 'Minutes', min: 0, max: 90, showValue: true, value: Math.floor(this.data.targetDurationMs / 60000) },
+                            { type: 'range', key: 'seconds', label: 'Seconds', min: 0, max: 59, showValue: true, value: Math.floor((this.data.targetDurationMs % 60000) / 1000) }
+                        ]
+                    },
+                    {
+                        type: 'checkbox-group',
+                        controls: [
+                            { type: 'checkbox', key: 'isLooping', label: 'Auto Restart' }
+                        ]
+                    }
+                ]
+            },
+            {
+                title: 'Actions',
+                groups: [
+                    {
+                        type: 'actions-list', // A simple container type
+                        controls: [
+                            // This now tells the Modal class to build the dropdowns
+                            { type: 'select', key: 'startAction', label: 'Start with:', itemSource: 'allCommands' },
+                            { type: 'select', key: 'endAction', label: 'End with:', itemSource: 'allCommands' }
+                        ]
+                    }
+                ]
+            },
+            {
+                title: 'Danger Zone',
+                groups: [
+                    {
+                        type: 'actions-row',
+                        controls: [
+                            { type: 'button', label: 'Delete Timer', action: 'delete-card', class: 'danger', onClick: () => this._handleDeleteCard() }
+                        ]
+                    }
+                ]
+            }
         ];
-        immediateChangeControls.forEach(el => el.addEventListener('change', () => this.handleSettingsChange()));
-        this.modeRadios.forEach(radio => radio.addEventListener('change', () => this.handleSettingsChange()));
-
-        // The action dropdowns use their dedicated, more expensive handler.
-        this.timerStartActionSelect.addEventListener('change', () => this.handleActionChange());
-        this.timerEndActionSelect.addEventListener('change', () => this.handleActionChange());
+    }
 
 
-        // SLIDERS
 
-        this.timerMinutesRange.addEventListener('input', () => {
-            this._updateDisplayTextFromSliders();
-            this.debouncedSliderSave()
-        });
-        this.timerSecondsRange.addEventListener('input', () => {
-            this._updateDisplayTextFromSliders();
-            this.debouncedSliderSave();
-        });
-       
+    _attachListeners() {
+        this.cardElement.addEventListener('click', (event) => {
+            const actionElement = event.target.closest('[data-action]');
+            if (!actionElement) return;
 
-        // TEXT EDITABLE minutes/seconds/title (these trigger on 'blur', which is fine)
-        this.timerMinutesValue.addEventListener('blur', (e) => this.handleManualTimeInput(e));
-        this.timerSecondsValue.addEventListener('blur', (e) => this.handleManualTimeInput(e));
-        this.timerTitle.addEventListener('blur', (e) => {
-            //@ts-ignore
-            const newTitle = e.target.textContent.trim();
-            if (newTitle !== this.data.title) {
-                this.updateData({ title: newTitle });
+            const action = actionElement.dataset.action;
+            switch (action) {
+                case 'start-pause':
+                    this.handlePlayPause();
+                    break;
+                case 'reset':
+                    this.reset();
+                    break;
+                case 'settings':
+                    this.openSettings();
+                    break;
             }
         });
 
@@ -210,186 +203,69 @@ export class TimerCard extends Card {
     // Event Handlers
     // ================================================================
 
-    onCommandsChanged(allCommands){
-        this.populateCommandSelectors(allCommands);
-    }
-
-    populateCommandSelectors(availableCommands) {
-        const startActionSelect = this.timerStartActionSelect;
-        const endActionSelect = this.timerEndActionSelect;
-
-        startActionSelect.innerHTML = '<option value="">None</option>';
-        endActionSelect.innerHTML = '<option value="">None</option>';
-
-        // The 'command' variable is now one of our rich Command Objects
-        availableCommands.forEach(command => {
-            // A timer cannot trigger its own commands
-            if (command.targetCard === this.id) return;
-
-            const option = document.createElement('option');
-            // Use the new properties for display text and value
-            option.textContent = command.name;
-            option.value = command.id;
-
-            startActionSelect.add(option);
-            //@ts-ignore
-            endActionSelect.add(option.cloneNode(true));
-        });
-
-        // Restore the selection using the correct property from our state
-        startActionSelect.value = this.data.startAction.commandId || "";
-        endActionSelect.value = this.data.endAction.commandId || "";
-    }
 
 
-    async _prepareAction(actionType, commandId) {
-        // If the selection is "None", clear the action
+
+    async _prepareAction(commandId) {
         if (!commandId) {
-            return this.updateData({ [actionType]: { commandId: "", durationMs: 0, indexToPlay: 0, triggered: false } });
+            return { commandId: "", durationMs: 0, args: {}, triggered: false };
         }
-
-        let durationMs = 0;
-        let args = {};
 
         const ticket = await this.preloadCommand(commandId);
-
-        if (ticket){
-            durationMs = ticket.durationMs;
-            args = ticket.args;
-        }
-
-        // Save the new, simple state.
-        await this.updateData({
-            [actionType]: {
-                commandId: commandId,
-                durationMs: durationMs,
-                args: args,
-                triggered: false
-            }
-        });
+        return {
+            commandId: commandId,
+            durationMs: ticket.durationMs,
+            args: ticket.args,
+            triggered: false
+        };
     }
 
-    /**
-     * Handles changes to settings like duration, looping, or mode.
-     * This is lightweight and does NOT re-prepare actions.
-     */
-    async handleSettingsChange() {
-        //@ts-ignore
-        const newMode = this.cardElement.querySelector('.timer-mode-radio:checked').value
-
-        if (newMode && newMode != this.data.mode && !this.data.isRunning){
-            this.reset();
-        }
-
-        await this.updateData({
-            optionsHidden: this.hideOptionsToggle.checked,
-            isLooping: this.loopCheckbox.checked,
-            mode: newMode,
-        });
-
-        this.updateUI();
-    }
-
-    async handleSliderChange() {
-        const minutes = parseInt(this.timerMinutesRange.value, 10);
-        const seconds = parseInt(this.timerSecondsRange.value, 10);
-
-        await this.updateData({
-            targetDurationMs: (minutes * 60 + seconds) * 1000,
-        });
-    }
-
-    /**
-     * Handles changes ONLY from the start/end action dropdowns.
-     * This is the ONLY place we should prepare actions.
-     */
-    async handleActionChange() {
-        const newStartCommandId = this.timerStartActionSelect.value;
-        const newEndCommandId = this.timerEndActionSelect.value;
-
-        // Run both async preparations in parallel.
-        await Promise.all([
-            this._prepareAction('startAction', newStartCommandId),
-            this._prepareAction('endAction', newEndCommandId)
-        ]);
-        
-    }
-
-    handleManualTimeInput(e) {
-        const value = parseInt(e.target.value, 10);
-        const type = e.target.dataset.type;
-
-        if (type === 'minutes') {
-            const validatedValue = isNaN(value) ? 0 : Math.max(0, Math.min(value, 90));
-            this.timerMinutesRange.value = String(validatedValue);
-        } else if (type === 'seconds') {
-            const validatedValue = isNaN(value) ? 0 : Math.max(0, Math.min(value, 59));
-            this.timerSecondsRange.value = String(validatedValue);
-        }
-
-        this._updateDisplayTextFromSliders();
-        this.debouncedSliderSave();
-    }
-
-    /**
-    * Updates ONLY the timer's text display based on current slider values.
-    * This is lightweight and can be called rapidly without performance issues.
-    */
-    _updateDisplayTextFromSliders() {
-        const minutes = parseInt(this.timerMinutesRange.value, 10);
-        const seconds = parseInt(this.timerSecondsRange.value, 10);
-        if (this.data.mode === 'timer'){
-            this.timerDisplay.textContent =
-            `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-        }
-        // Also sync the number input box next to the slider
-        this.timerMinutesValue.value = String(minutes);
-        this.timerSecondsValue.value = String(seconds);
-    }
 
     handleButtonDeletion({ deletedId }) {
-    let needsUpdate = false;
-    let newStartAction = { ...this.data.startAction };
-    let newEndAction = { ...this.data.endAction };
+        let needsUpdate = false;
+        let newStartAction = { ...this.data.startAction };
+        let newEndAction = { ...this.data.endAction };
 
-    // Check if the start action's command is tied to the deleted card
-    if (newStartAction.commandId && newStartAction.commandId.startsWith(deletedId)) {
-        newStartAction = { commandId: "", durationMs: 0, indexToPlay: 0, triggered: false };
-        needsUpdate = true;
-    }
+        // Check if the start action's command is tied to the deleted card
+        if (newStartAction.commandId && newStartAction.commandId.startsWith(deletedId)) {
+            newStartAction = { commandId: "", durationMs: 0, indexToPlay: 0, triggered: false };
+            needsUpdate = true;
+        }
 
-    // Check if the end action's command is tied to the deleted card
-    if (newEndAction.commandId && newEndAction.commandId.startsWith(deletedId)) {
-        newEndAction = { commandId: "", durationMs: 0, indexToPlay: 0, triggered: false };
-        needsUpdate = true;
-    }
+        // Check if the end action's command is tied to the deleted card
+        if (newEndAction.commandId && newEndAction.commandId.startsWith(deletedId)) {
+            newEndAction = { commandId: "", durationMs: 0, indexToPlay: 0, triggered: false };
+            needsUpdate = true;
+        }
 
-    if (needsUpdate) {
-        this.updateData({ startAction: newStartAction, endAction: newEndAction }).then(() => {
-            this.updateUI(); // Refresh the dropdowns to show "None"
-        });
+        if (needsUpdate) {
+            this.updateData({ startAction: newStartAction, endAction: newEndAction }).then(() => {
+                this.updateUI(); // Refresh the dropdowns to show "None"
+            });
+        }
     }
-}
 
     handlePlayPause() {
-        const isFinished = this.data.mode === 'timer' && this.data.elapsedMs >= this.data.targetDurationMs;
+        const isFinished = (this.data.mode === 'timer' && this.data.elapsedMs >= this.data.targetDurationMs) ||
+            (this.data.mode === 'stopwatch' && this.data.targetDurationMs > 0 && this.data.elapsedMs >= this.data.targetDurationMs);
 
         if (!this.data.isRunning && isFinished) {
             this.reset();
-            // After reset, the state is now !isRunning and elapsedMs is 0,
-            // so we can just continue to the logic below to start it fresh.
         }
 
         const newIsRunning = !this.data.isRunning;
-        this.updateData({ isRunning: newIsRunning });
+        const dataToUpdate = { isRunning: newIsRunning };
 
         if (newIsRunning) {
-            this.startTimer();
+            // If we are starting the timer, also set the start time.
+            dataToUpdate.startTime = Date.now();
+            this.updateData(dataToUpdate);
+            this.startTimer(); // startTimer will now only handle actions, not state
         } else {
-            // Pausing
-            const newElapsedMs = (this.data.elapsedMs || 0) + (Date.now() - this.data.startTime);
+            // If we are pausing, calculate the new elapsed time.
             cancelAnimationFrame(this.animationFrameId);
-            this.updateData({ elapsedMs: newElapsedMs });
+            dataToUpdate.elapsedMs = (this.data.elapsedMs || 0) + (Date.now() - this.data.startTime);
+            this.updateData(dataToUpdate);
         }
         this.updateUI();
     }
@@ -401,18 +277,13 @@ export class TimerCard extends Card {
     // ================================================================
 
     startTimer() {
-        // 1. Update the state with the current start time
-        this.updateData({ startTime: Date.now() });
-
-        // 2. Execute the start action if it exists and hasn't been triggered yet
         const startAction = this.data.startAction;
         if (startAction.commandId && !startAction.triggered) {
             this.executeCommand(startAction.commandId, startAction.args);
-            // Update the state to mark it as triggered
             const newStartActionState = { ...startAction, triggered: true };
+            // This is the only updateData call left in this function.
             this.updateData({ startAction: newStartActionState });
         }
-        // 3. Start the timer loop
         this.tick();
     }
 
@@ -452,8 +323,11 @@ export class TimerCard extends Card {
             this.updateData({ endAction: newEndActionState });
         }
 
-        if (this.data.mode === 'timer' && remainingMs <= 0) {
-            // If an end action was supposed to fire but hasn't, fire it now as a fallback.
+        const isTimerFinished = this.data.mode === 'timer' && remainingMs <= 0;
+        const isStopwatchFinished = this.data.mode === 'stopwatch' && this.data.targetDurationMs > 0 && currentElapsed >= this.data.targetDurationMs;
+
+        if (isTimerFinished || isStopwatchFinished) {
+
             if (endAction.commandId && !endAction.triggered) {
                 MSG.log(`Fallback End Action Fired from ${this.data.title}`)
                 this.executeCommand(endAction.commandId, endAction.args);
@@ -469,13 +343,13 @@ export class TimerCard extends Card {
             return; // IMPORTANT: Stop the loop for this frame
         }
 
-   
+
 
         this.renderDisplay(currentElapsed);
         this.animationFrameId = requestAnimationFrame(() => this.tick());
     }
 
-        
+
 
     renderDisplay(currentElapsed = this.data.elapsedMs) {
         let msToDisplay;
@@ -512,37 +386,16 @@ export class TimerCard extends Card {
     updateUI() {
         // Sync UI controls with the state object
         this.timerTitle.textContent = this.data.title;
-        this.timerMinutesRange.value = String(Math.floor(this.data.targetDurationMs / 60000));
-        this.timerSecondsRange.value = String(Math.floor((this.data.targetDurationMs % 60000) / 1000));
 
-        this.timerMinutesValue.value = this.timerMinutesRange.value;
-        this.timerSecondsValue.value = this.timerSecondsRange.value;
-
-        this.hideOptionsToggle.checked = this.data.optionsHidden;
-        this.loopCheckbox.checked = this.data.isLooping;
-
-        /** @type {HTMLInputElement} */
-        const timerModeRadio = this.cardElement.querySelector(
-            `.timer-mode-radio[value="${this.data.mode}"]`
-        );
-
-        timerModeRadio.checked = true;
-
-
-        this.timerStartActionSelect.value = this.data.startAction.commandId || "";
-        this.timerEndActionSelect.value = this.data.endAction.commandId || "";
 
         // Update dynamic UI elements
         this.startPauseBtn.textContent = this.data.isRunning ? 'Pause' : 'Start';
         this.startPauseBtn.style.backgroundColor = this.data.isRunning ? 'var(--primary-color)' : 'var(--accent-color)'
         this.startPauseBtn.style.color = this.data.isRunning ? 'var(--primary-color-text)' : 'var(--accent-color-text)'
-        this.optionsContainers.forEach(c => c.classList.toggle('hidden-options', this.data.optionsHidden));
-        this.timerTitle.contentEditable = String(!this.data.optionsHidden)
-        this.endActionContainer.style.display = this.data.isLooping ? 'none' : '';
-        this.startActionLabel.textContent = this.data.isLooping ? 'Play Sound:' : 'Start with:';
 
         this.renderDisplay();
 
     }
+
 
 }

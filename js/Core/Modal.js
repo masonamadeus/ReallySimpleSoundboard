@@ -1,8 +1,10 @@
 export class Modal {
-    constructor(title, config, data, onSave) {
+    constructor(title, config, data, commands, allCommands, onSave) {
         this.title = title;
         this.config = config;
         this.data = data;
+        this.commands = commands; // Commands specific to the card
+        this.allCommands = allCommands; // All commands across all cards
         this.onSave = onSave; // Main save callback for form inputs
         this.modalElement = this._createModalElement();
         this._buildForm();
@@ -11,30 +13,29 @@ export class Modal {
 
     _createModalElement() {
         const modal = document.createElement('div');
-        modal.className = 'modal';
+        modal.className = 'modal'; // Keep this for the backdrop
         modal.innerHTML = `
-            <div class="modal-content">
+        <div class="modal-content rss-modal">
+            <div class="modal-header">
                 <h3>${this.title}</h3>
-                <div class="modal-form-content"></div>
-                <div class="modal-actions-row">
-                    <button class="modal-save-btn accent-color">Save</button>
-                </div>
             </div>
-        `;
+            <div class="modal-form-content"></div>
+            <div class="modal-actions-row">
+                 <button class="modal-close-btn highlight-color">Close</button>
+            </div>
+        </div>
+    `;
 
         modal.addEventListener('mousedown', (e) => {
-            // Only close if the click starts directly on the backdrop
             if (e.target === modal) {
                 this.close();
             }
         });
 
-        // The save button can remain a 'click' event since it's an intentional action
-        modal.querySelector('.modal-save-btn').addEventListener('click', () => {
-            this._save();
+        modal.querySelector('.modal-close-btn').addEventListener('click', () => {
             this.close();
         });
-        
+
         return modal;
     }
 
@@ -54,7 +55,7 @@ export class Modal {
                 groupEl.className = `modal-form-group modal-group-${group.type || 'default'}`;
                 
                 group.controls.forEach(control => {
-                    const controlEl = this._createControl(control);
+                    const controlEl = this._createControl(control, group);
                     if (controlEl) groupEl.appendChild(controlEl);
                 });
                 sectionEl.appendChild(groupEl);
@@ -63,41 +64,29 @@ export class Modal {
         });
     }
 
-    _createControl(control) {
+    _createControl(control, group) {
         const key = control.key;
-        const value = this.data[key];
+        const value = control.value !== undefined? control.value : this.data[key];
         const container = document.createElement('div'); // A container for the control and its label
 
         // Use a switch for clarity and extensibility
         switch (control.type) {
             case 'text':
+
             case 'color': {
-                const label = document.createElement('label');
-                label.textContent = control.label;
                 const input = document.createElement('input');
                 input.type = control.type;
                 input.dataset.key = key;
-                input.value = value;
 
-                // For the specific 'title-and-color' layout
-                if (group.type === 'title-and-color') {
-                     container.className = 'title-and-color';
-                     if (control.type === 'color') {
-                         container.appendChild(input); // Color picker first
-                         container.appendChild(label);
-                     } else {
-                        // This assumes the text input is part of this group, let's make it more robust
-                        const textInput = document.createElement('input');
-                        textInput.type = 'text';
-                        textInput.dataset.key = 'title'; // Assuming the key is 'title'
-                        textInput.value = this.data['title'];
-                        container.appendChild(textInput);
-                     }
+                // For color, the value needs to be a hex code, not a CSS variable
+                if (control.type === 'color' && String(value).startsWith('var(')) {
+                    const cssVarName = value.match(/--[\w-]+/)[0];
+                    input.value = getComputedStyle(document.documentElement).getPropertyValue(cssVarName).trim();
                 } else {
-                    container.appendChild(label);
-                    container.appendChild(input);
+                    input.value = value;
                 }
-                return container;
+                
+                return input;
             }
 
             case 'checkbox': {
@@ -119,15 +108,82 @@ export class Modal {
                 return button;
             }
 
-            case 'custom-html': {
-                const div = document.createElement('div');
-                // The config can provide a function that returns the HTML string or a DOM element
-                if (typeof control.content === 'function') {
-                    div.innerHTML = control.content(this.data);
-                } else {
-                    div.innerHTML = control.content || '';
+            case 'range': {
+                const group = document.createElement('div');
+                group.className = 'slider-group';
+
+                const labelEl = document.createElement('label');
+                labelEl.textContent = control.label;
+                group.appendChild(labelEl);
+
+                const input = document.createElement('input');
+                input.type = 'range';
+                input.dataset.key = key;
+                input.min = control.min || 0;
+                input.max = control.max || 100;
+                input.step = control.step || 1;
+                input.value = value;
+                group.appendChild(input);
+
+                // Optional value display
+                if (control.showValue) {
+                    const valueSpan = document.createElement('span');
+                    valueSpan.className = 'slider-value';
+                    valueSpan.dataset.key = key; // Link to the input
+                    valueSpan.textContent = value;
+                    group.appendChild(valueSpan);
                 }
-                return div;
+                return group;
+            }
+
+            case 'select': {
+                const container = document.createElement('div');
+                container.className = 'timer-sound-select'; // Use existing styles
+
+                const label = document.createElement('label');
+                label.textContent = control.label;
+                container.appendChild(label);
+
+                const select = document.createElement('select');
+                select.dataset.key = control.key;
+                // Use the appropriate class from your CSS
+                select.className = control.key === 'startAction' ? 'timer-start-action' : 'timer-end-action';
+
+
+                // Add a "None" option by default
+                select.add(new Option("None", ""));
+
+                this.allCommands.forEach(command => {
+                    // The logic to prevent a card from triggering itself is now more robust,
+                    // as it compares against the card's actual ID from the data object.
+                    if (command.targetCard === this.data.id) return;
+                    select.add(new Option(command.name, command.id));
+                });
+
+                // The value is still sourced from the card's data.
+                select.value = this.data[control.key]?.commandId || "";
+                container.appendChild(select);
+                return container;
+            }
+
+            case 'radio': {
+                const group = document.createElement('div');
+                group.className = 'modal-radio-group';
+                control.options.forEach(option => {
+                    const label = document.createElement('label');
+                    const input = document.createElement('input');
+                    input.type = 'radio';
+                    input.name = key;
+                    input.dataset.key = key;
+                    input.value = option.value;
+                    if (value === option.value) {
+                        input.checked = true;
+                    }
+                    label.appendChild(input);
+                    label.append(` ${option.label}`);
+                    group.appendChild(label);
+                });
+                return group;
             }
 
             case 'list': {
@@ -167,18 +223,39 @@ export class Modal {
 
                 return listContainer;
             }
+
+            case 'custom-html': {
+                const div = document.createElement('div');
+                // The config can provide a function that returns the HTML string or a DOM element
+                if (typeof control.content === 'function') {
+                    div.innerHTML = control.content(this.data);
+                } else {
+                    div.innerHTML = control.content || '';
+                }
+                return div;
+            }
             
-            default:
+            default: {
                 return null;
+            }
         }
     }
 
     _save() {
         const newData = { ...this.data };
-        this.modalElement.querySelectorAll('input[data-key]').forEach(input => {
+        this.modalElement.querySelectorAll('[data-key]').forEach(input => {
             const key = input.dataset.key;
+
+            if (input.tagName === 'SPAN') return;
+
             if (input.type === 'checkbox') {
                 newData[key] = input.checked;
+            } else if (input.tagName === 'SELECT') {
+                newData[key] = input.value;
+            } else if (input.type === 'radio') {
+                if (input.checked) {
+                    newData[key] = input.value;
+                }
             } else {
                 newData[key] = input.value;
             }
@@ -225,8 +302,15 @@ export class Modal {
 
         // Add a general input listener to trigger the main onSave function for form elements
         this.modalElement.addEventListener('input', (e) => {
-            const input = e.target.closest('input[data-key]');
+            const input = e.target.closest('[data-key]');
             if (input) {
+                // If it's a range slider with a value display, update it
+                if (input.type === 'range') {
+                    const valueSpan = this.modalElement.querySelector(`.slider-value[data-key="${input.dataset.key}"]`);
+                    if (valueSpan) {
+                        valueSpan.textContent = input.value;
+                    }
+                }
                 this._save();
             }
         });
