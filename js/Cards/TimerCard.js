@@ -73,101 +73,6 @@ export class TimerCard extends Card {
         }
     }
 
-    async openSettings() {
-        this._openSettingsModal();
-    }
-
-    /**
-    * Overrides the base save hook to handle the specific logic for this card.
-    * This is where we transform the modal's output into savable data.
-    * @param {object} newData The data returned from the modal.
-    */
-     async _onSettingsSave(newData) {
-        const { minutes, seconds, startAction: startActionId, endAction: endActionId, ...cardDataToSave } = newData;
-
-        // Always rebuild the action objects from the command IDs provided by the modal.
-        cardDataToSave.startAction = await this._prepareAction(startActionId);
-        cardDataToSave.endAction = await this._prepareAction(endActionId);
-
-        // Calculate the target duration.
-        cardDataToSave.targetDurationMs = (parseInt(minutes, 10) * 60 + parseInt(seconds, 10)) * 1000;
-
-        // If the mode changed while the timer wasn't running, reset it.
-        if (newData.mode && newData.mode !== this.data.mode && !this.data.isRunning) {
-            this.reset();
-        }
-
-        // Now, we can safely update the data with the fully-formed objects.
-        this.updateData(cardDataToSave);
-    }
-
-
-    getSettingsConfig() {
-        return [
-            {
-                title: ``,
-                groups: [
-                    {
-                        type: 'title-and-color',
-                        controls: [
-                            { type: 'text', key: 'title', label: '' }
-                        ]
-                    },
-                    {
-                        type: 'radio-group', // A new group type for the mode
-                        controls: [
-                            {
-                                type: 'radio', key: 'mode', options: [
-                                    { label: 'Timer', value: 'timer' },
-                                    { label: 'Stopwatch', value: 'stopwatch' }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        type: 'sliders',
-                        controls: [
-                            { type: 'range', key: 'minutes', label: 'Minutes', min: 0, max: 90, showValue: true, value: Math.floor(this.data.targetDurationMs / 60000) },
-                            { type: 'range', key: 'seconds', label: 'Seconds', min: 0, max: 59, showValue: true, value: Math.floor((this.data.targetDurationMs % 60000) / 1000) }
-                        ]
-                    },
-                    {
-                        type: 'checkbox-group',
-                        controls: [
-                            { type: 'checkbox', key: 'isLooping', label: 'Auto Restart' }
-                        ]
-                    }
-                ]
-            },
-            {
-                title: 'Actions',
-                groups: [
-                    {
-                        type: 'actions-list', // A simple container type
-                        controls: [
-                            // This now tells the Modal class to build the dropdowns
-                            { type: 'select', key: 'startAction', label: 'Start with:', itemSource: 'allCommands' },
-                            { type: 'select', key: 'endAction', label: 'End with:', itemSource: 'allCommands' }
-                        ]
-                    }
-                ]
-            },
-            {
-                title: 'Danger Zone',
-                groups: [
-                    {
-                        type: 'actions-row',
-                        controls: [
-                            { type: 'button', label: 'Delete Timer', action: 'delete-card', class: 'danger', onClick: () => this._handleDeleteCard() }
-                        ]
-                    }
-                ]
-            }
-        ];
-    }
-
-
-
     _attachListeners() {
         this.cardElement.addEventListener('click', (event) => {
             const actionElement = event.target.closest('[data-action]');
@@ -259,14 +164,17 @@ export class TimerCard extends Card {
         if (newIsRunning) {
             // If we are starting the timer, also set the start time.
             dataToUpdate.startTime = Date.now();
+
             this.updateData(dataToUpdate);
-            this.startTimer(); // startTimer will now only handle actions, not state
+            this.startTimer();
         } else {
             // If we are pausing, calculate the new elapsed time.
             cancelAnimationFrame(this.animationFrameId);
             dataToUpdate.elapsedMs = (this.data.elapsedMs || 0) + (Date.now() - this.data.startTime);
+
             this.updateData(dataToUpdate);
         }
+
         this.updateUI();
     }
 
@@ -352,6 +260,7 @@ export class TimerCard extends Card {
 
 
     renderDisplay(currentElapsed = this.data.elapsedMs) {
+        console.log('renderdisplay')
         let msToDisplay;
         if (this.data.mode === 'timer') {
             msToDisplay = Math.max(0, this.data.targetDurationMs - currentElapsed);
@@ -397,5 +306,110 @@ export class TimerCard extends Card {
 
     }
 
+    // #region Settings Modal
+
+     getSettingsConfig() {
+        return [
+            {
+                title: ``,
+                groups: [
+                    {
+                        type: 'title-and-color',
+                        controls: [
+                            { type: 'text', key: 'title', label: '' }
+                        ]
+                    },
+                    {
+                        type: 'radio-group', // A new group type for the mode
+                        controls: [
+                            {
+                                type: 'radio', key: 'mode', options: [
+                                    { label: 'Timer', value: 'timer' },
+                                    { label: 'Stopwatch', value: 'stopwatch' }
+                                ]
+                            }
+                        ]
+                    },
+                    {
+                        type: 'sliders',
+                        controls: [
+                            { type: 'range', key: 'minutes', label: 'Minutes', min: 0, max: 90, showValue: true, value: Math.floor(this.data.targetDurationMs / 60000) },
+                            { type: 'range', key: 'seconds', label: 'Seconds', min: 0, max: 59, showValue: true, value: Math.floor((this.data.targetDurationMs % 60000) / 1000) }
+                        ]
+                    },
+                    {
+                        type: 'checkbox-group',
+                        controls: [
+                            { type: 'checkbox', key: 'isLooping', label: 'Auto Restart' }
+                        ]
+                    }
+                ]
+            },
+            {
+                title: 'Actions',
+                groups: [
+                    {
+                        type: 'actions-list', // A simple container type
+                        controls: [
+                            // This now tells the Modal class to build the dropdowns
+                            { type: 'command-select', key: 'startAction', label: 'Start with:', itemSource: 'allCommands' },
+                            { type: 'command-select', key: 'endAction', label: 'End with:', itemSource: 'allCommands' }
+                        ]
+                    }
+                ]
+            },
+            {
+                title: 'Danger Zone',
+                groups: [
+                    {
+                        type: 'actions-row',
+                        controls: [
+                            // The onClick function is replaced with a simple 'action' string
+                            { type: 'button', label: 'Delete Timer', action: 'delete-card', class: 'danger' }
+                        ]
+                    }
+                ]
+            }
+        ];
+    }
+
+    _handleModalAction(e) {
+        const { action } = e.detail;
+        if (action === 'delete-card') {
+            this._handleDeleteCard();
+        }
+    }
+
+    async _handleModalInput(e) {
+        const { key, value } = e.detail;
+
+        // Create a temporary data object to build the update
+        const updatedData = { ...this.data, [key]: value };
+
+        // Re-calculate targetDurationMs if minutes or seconds changed
+        if (key === 'minutes' || key === 'seconds') {
+            const minutes = key === 'minutes' ? parseInt(value, 10) : Math.floor(this.data.targetDurationMs / 60000);
+            const seconds = key === 'seconds' ? parseInt(value, 10) : Math.floor((this.data.targetDurationMs % 60000) / 1000);
+            updatedData.targetDurationMs = (minutes * 60 + seconds) * 1000;
+        }
+
+        // Re-prepare action objects if they were changed
+        if (key === 'startAction') {
+            updatedData.startAction = await this._prepareAction(value);
+        }
+        if (key === 'endAction') {
+            updatedData.endAction = await this._prepareAction(value);
+        }
+
+        // If the mode changed while the timer wasn't running, reset it.
+        if (key === 'mode' && value !== this.data.mode && !this.data.isRunning) {
+            this.reset();
+        }
+        
+        // Update the card's state with all the changes
+        this.updateData(updatedData);
+    }
+
+    //#endregion
 
 }

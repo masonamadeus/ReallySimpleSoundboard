@@ -21,7 +21,7 @@ import { store } from '../Core/StateStore.js';
 // UI interactions trigger methods on this manager.
 // ====================================================================
 
-export class SoundboardManager {
+export class SoundboardController {
 
     //#region Constructor
     constructor(dbInstance) {
@@ -76,7 +76,7 @@ export class SoundboardManager {
         const {allCards, layout } = await this.loadCardsAndLayout();
 
         store.dispatch({
-            type: MSG.is.INITIALIZE_STATE,
+            type: MSG.STATE_ACTIONS.INITIALIZE_STATE,
             payload: {
                 allCards: allCards,
                 layout: layout,
@@ -95,77 +95,71 @@ export class SoundboardManager {
         if (!CardClass) return;
 
         const newCardInstance = Card.create(CardClass);
+        
+        // 1. Side Effect: Save the new card to the database FIRST.
         await this.db.save(newCardInstance.id, newCardInstance.data);
         
-        // Dispatch the state-changing action
+        // 2. Dispatch the action to update the state.
         store.dispatch({
             type: MSG.STATE_ACTIONS.CARD_ADDED,
             payload: { cardInstance: newCardInstance, parentId, index }
         });
         
-        // The layout is now updated in the reducer, so we get it from the store to save it.
+        // 3. Side Effect: Save the newly updated layout from the store.
         await this.saveLayout(store.getState().layout);
     }
 
-    async moveCard(cardId, newParentId, newIndex) {
-        const { layout } = store.getState(); // Get current layout
-        const { node } = layout.findNodeAndParent(cardId);
-        if (node) {
-            layout.removeNode(cardId);
-            layout.insertNode(node, newParentId, newIndex);
-            
-            store.dispatch({
-                type: MSG.STATE_ACTIONS.LAYOUT_UPDATED,
-                payload: { layout }
-            });
-
-            await this.saveLayout(store.getState().layout);
-        }
-    }
-
-    async resizeCard(cardId, newGridSpan) {
-        const { layout } = store.getState(); // Get current layout
-        const node = layout.findNode(cardId);
-        if (node) {
-            node.gridSpan = newGridSpan;
-            
-            store.dispatch({
-                type: MSG.STATE_ACTIONS.LAYOUT_UPDATED,
-                payload: { layout }
-            });
-            
-            await this.saveLayout(store.getState().layout);
-        }
-    }
-
-    /**
-    * Safely removes a card from the application by its unique ID.
-    * @param {string} cardIdToRemove The unique ID of the card to be removed.
-    **/
     async removeCard(cardIdToRemove) {
         const { allCards } = store.getState();
         const cardInstance = allCards.get(cardIdToRemove);
         if (!cardInstance) return;
-        const confirmed = await this.showConfirmModal(`Are you sure you want to delete the card "${cardInstance.data.title}"? This action cannot be undone.`, 'Delete', 'Cancel');
+
+        // Side Effect: Show confirmation dialog.
+        const confirmed = await this.showConfirmModal(`Are you sure you want to delete "${cardInstance.data.title}"?`, 'Delete', 'Cancel');
         if (!confirmed) return;
-        // Perform card-specific cleanup
+        
+        // Side Effect: Clean up the card instance itself.
         if (typeof cardInstance.destroy === 'function') {
             cardInstance.destroy();
         }
 
         this.unregisterCardCommands(cardInstance.id);
 
-        // Remove from state and DB
+        // Side Effect: Delete from the database.
         await this.db.delete(cardIdToRemove);
 
+        // Dispatch the pure state update.
         store.dispatch({
             type: MSG.STATE_ACTIONS.CARD_REMOVED,
             payload: { cardId: cardIdToRemove }
-        })
+        });
         
-        const { layout: updatedLayout } = store.getState();
-        await this.saveLayout(updatedLayout);
+        // Side Effect: Save the new layout.
+        await this.saveLayout(store.getState().layout);
+    }
+
+    async moveCard(cardId, newParentId, newIndex) {
+        // The manager's job is to orchestrate, not to directly manipulate state.
+        // It dispatches an action describing what needs to happen.
+        store.dispatch({
+            type: MSG.ACTIONS.REQUEST_MOVE_CARD, // We can reuse the existing action type
+            payload: { cardId, newParentId, newIndex }
+        });
+
+        // After the state has been updated by the reducer, we save the new layout.
+        await this.saveLayout(store.getState().layout);
+    }
+
+    async resizeCard(cardId, newGridSpan) {
+        // The Controller's ONLY job is to dispatch the user's intent.
+        // It does NOT modify the layout state itself.
+        store.dispatch({
+            type: MSG.STATE_ACTIONS.CARD_RESIZED,
+            payload: { cardId, newGridSpan }
+        });
         
+        // Side Effect: Save the new state after the reducer has updated it.
+        await this.saveLayout(store.getState().layout);
     }
 
     async updateCardData(cardId, newData) {
@@ -173,22 +167,20 @@ export class SoundboardManager {
         const cardInstance = allCards.get(cardId);
         if (!cardInstance) return;
 
-        const oldTitle = cardInstance.data.title;
-
-        // 1. Update the in-memory state
+        // Direct and local update of the card instance
         cardInstance.data = { ...cardInstance.data, ...newData };
+        cardInstance.updateUI(); // The card itself updates its view
 
-        // 2. Save the updated data to the database
-        await this.db.save(cardInstance.id, cardInstance.data);
+        // Side Effect: Save the updated data to the database
+        await this.db.save(cardId, cardInstance.data);
 
-        // 3. If the title changed, the card's command names need to be rebroadcast
-        if (newData.title && newData.title !== oldTitle) {
-            // The card doesn't need to know about commands; it just reports a data change.
+        // Side Effect: Rebuild commands if needed (local concern)
+        if (newData.title && newData.title !== cardInstance.data.title) {
             cardInstance._rebuildCommands();
         }
-        // 4. Tell the specific card instance to update its UI
-        cardInstance.updateUI();
     }
+
+    
 
     async loadCardsAndLayout() {
         const localAllCards = new Map(); // Create a temporary map

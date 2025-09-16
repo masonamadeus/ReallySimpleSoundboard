@@ -68,90 +68,6 @@ export class SoundCard extends Card {
         this._initialize();
     }
 
-    getSettingsConfig() {
-        // This is the declarative "blueprint" for our modal.
-        return [
-            {
-                title: 'Button Settings',
-                groups: [
-                    {
-                        type: 'title-and-color',
-                        controls: [
-                            { type: 'color', key: 'color', label: '' },
-                            { type: 'text', key: 'title', label: '' }
-                        ]
-                    },
-                    {
-                        type: 'checkbox-group',
-                        controls: [
-                            { type: 'checkbox', key: 'shuffle', label: 'Random' },
-                            { type: 'checkbox', key: 'autoplay', label: 'Autoplay' },
-                            { type: 'checkbox', key: 'priority', label: 'Priority' },
-                            { type: 'checkbox', key: 'loop', label: 'Loop' }
-                        ]
-                    }
-                ]
-            },
-            {
-                title: 'Audio Files',
-                groups: [
-                    {
-                        type: 'file-management',
-                        controls: [
-                            {
-                                type: 'button',
-                                label: 'Add Audio File',
-                                action: 'add-file',
-                                class: 'accent-color',
-                                onClick: (modal) => this._handleAddFileClick(modal)
-                            },
-                            {
-                                type: 'list',
-                                itemSource: 'files',
-                                itemTitleKey: 'fileName',
-                                emptyMessage: 'No files added yet.',
-                                actions: [
-                                    {
-                                        label: 'Remove',
-                                        action: 'remove-file',
-                                        class: 'danger',
-                                        onClick: (modal, itemIndex) => this._handleRemoveFile(modal, itemIndex)
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                title: 'Danger Zone',
-                groups: [
-                    {
-                        type: 'actions-row',
-                        controls: [
-                            {
-                                type: 'button',
-                                label: 'Delete Button',
-                                action: 'delete-card',
-                                class: 'danger',
-                                onClick: () => this._handleDeleteCard()
-                            },
-                            {
-                                type: 'button',
-                                label: 'Clear All Files',
-                                action: 'clear-files',
-                                class: 'highlight-color',
-                                onClick: (modal) => this._handleClearFiles(modal)
-                            }
-                        ]
-                    }
-                ]
-            }
-        ];
-    }
-
-
-
 
     _getDOMElemons() {
         // DOM REFERENCES
@@ -163,7 +79,6 @@ export class SoundCard extends Card {
          * @property {HTMLSpanElement} buttonText
          * @property {HTMLInputElement} volumeSlider
          * @property {HTMLInputElement} speedSlider
-         * @property {HTMLTemplateElement} settingsModalTemplate
          * 
          */
 
@@ -175,8 +90,6 @@ export class SoundCard extends Card {
             buttonText: this.cardElement.querySelector('.button-text'),
             volumeSlider: this.cardElement.querySelector('.volume-slider'),
             speedSlider: this.cardElement.querySelector('.speed-slider'),
-            //@ts-ignore
-            settingsModalTemplate: document.getElementById('sound-card-template').content.querySelector('.sound-settings-modal')
         };
     }
 
@@ -533,42 +446,146 @@ export class SoundCard extends Card {
     // #region SETTINGS MODAL
     // ==================================
 
-    openSettings() {
-        this._openSettingsModal();
+    getSettingsConfig() {
+        return [
+            {
+                title: 'Button Settings',
+                groups: [
+                    {
+                        type: 'title-and-color',
+                        controls: [
+                            { type: 'color', key: 'color' },
+                            { type: 'text', key: 'title' }
+                        ]
+                    },
+                    {
+                        type: 'checkbox-group',
+                        controls: [
+                            { type: 'checkbox', key: 'shuffle', label: 'Random' },
+                            { type: 'checkbox', key: 'autoplay', label: 'Autoplay' },
+                            { type: 'checkbox', key: 'priority', label: 'Priority' },
+                            { type: 'checkbox', key: 'loop', label: 'Loop' }
+                        ]
+                    }
+                ]
+            },
+            {
+                title: 'Audio Files',
+                groups: [
+                    {
+                        type: 'actions-row', // A row for action buttons
+                        controls: [
+                             {
+                                type: 'button',
+                                label: 'Add Audio File',
+                                action: 'add-file', // Action identifier
+                                class: 'accent-color'
+                            },
+                             {
+                                type: 'button',
+                                label: 'Clear All',
+                                action: 'clear-files', // Action identifier
+                                class: 'highlight-color'
+                            }
+                        ]
+                    },
+                    {
+                        type: 'list', // The list of files
+                        controls: [
+                            {
+                                type: 'list',
+                                key: 'files',
+                                itemSource: 'files',
+                                itemTitleKey: 'fileName',
+                                emptyMessage: 'No audio files yet.',
+                                actions: [
+                                    {
+                                        label: 'Remove',
+                                        action: 'remove-file', // Action identifier for list items
+                                        class: 'danger'
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                title: 'Danger Zone',
+                groups: [
+                    {
+                        type: 'actions-row',
+                        controls: [
+                            {
+                                type: 'button',
+                                label: 'Delete Button',
+                                action: 'delete-card', // Action identifier
+                                class: 'danger'
+                            }
+                        ]
+                    }
+                ]
+            }
+        ];
     }
 
-    _handleAddFileClick(modal) {
+    _handleModalAction(e) {
+        const { action, itemIndex } = e.detail;
+        switch (action) {
+            case 'delete-card':
+                this._handleDeleteCard();
+                break;
+            case 'add-file':
+                this._handleAddFileClick();
+                break;
+            case 'clear-files':
+                this._handleClearFiles();
+                break;
+            case 'remove-file':
+                if (itemIndex !== undefined) {
+                    this._handleRemoveFile(itemIndex);
+                }
+                break;
+        }
+    }
+
+    _handleAddFileClick() {
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = 'audio/*';
         fileInput.multiple = true;
         fileInput.onchange = async (event) => {
             const files = Array.from(event.target.files);
+            const newFilesData = [...this.data.files]; // Create a new array
+
             for (const file of files) {
                 const arrayBuffer = await file.arrayBuffer();
                 const fileData = { fileName: file.name, mimeType: file.type, arrayBuffer: arrayBuffer };
-                await this._processFile(fileData); // Assuming _processFile is still on the card
-                this.data.files.push(fileData);
+                await this._processFile(fileData);
+                newFilesData.push(fileData);
             }
-            await this.updateData({ files: this.data.files });
-            modal.refresh('files', this.data); // Re-render the modal to show the new file list
+            
+            await this.updateData({ files: newFilesData });
+            // The modal needs to be told to re-render the list
+            this.settingsModal.rebuild();
         };
         fileInput.click();
     }
 
-    async _handleRemoveFile(modal, index) {
+    async _handleRemoveFile(index) {
         this.player.stop();
-        this.data.files.splice(index, 1);
-        await this.updateData({ files: this.data.files });
-        modal.refresh('files', this.data);
+        const newFiles = [...this.data.files];
+        newFiles.splice(index, 1);
+        await this.updateData({ files: newFiles });
+        this.settingsModal.rebuild();
     }
 
-    async _handleClearFiles(modal) {
+    async _handleClearFiles() {
         const confirmed = await MSG.confirm("Are you sure you want to clear all audio files for this button?");
         if (confirmed) {
             this.player.stop();
             await this.updateData({ files: [] });
-            modal.refresh('files', this.data)
+            this.settingsModal.rebuild();
         }
     }
 

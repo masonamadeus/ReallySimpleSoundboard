@@ -3,7 +3,7 @@ import { store } from '../Core/StateStore.js';
 export class ControlDockManager {
     /**
      * Manages the new three-card control dock at the bottom of the screen.
-     * @param {import('./SoundboardManager.js').SoundboardManager} soundboardManager
+     * @param {import('./SoundboardController.js').SoundboardController} soundboardManager
      */
     constructor() {
         this.openCard = null; // Tracks which card is currently open
@@ -121,9 +121,7 @@ export class ControlDockManager {
                 stickerElement.setAttribute('draggable', true);
 
                 // Add an explicit height to fix the Notepad preview
-                if (type === 'notepad') {
-                    stickerElement.style.height = '150px';
-                }
+                stickerElement.style.minHeight = '150px';
 
                 const shield = stickerElement.querySelector('.interaction-shield') || document.createElement('div');
                 shield.className = 'interaction-shield';

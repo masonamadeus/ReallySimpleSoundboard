@@ -30,7 +30,6 @@ class Ticket {
 //#endregion
 
 //#region CARD CLASS
-// what if we changed how we handle 'type' entirely, by making indexedDB create a store based on the class name of whatever card
 export class Card {
 
     // Make the PreloadTicket class available to child cards because imports are annoying asf
@@ -124,51 +123,59 @@ export class Card {
         return null;
     }
 
-    // Add this generic helper method to open the modal
+    // Generic method to open settings modal, but allow child cards to overwrite if needed
+    openSettings(){
+        this._openSettingsModal();
+    }
+
+    // Generic helper method to open the settings modal
+    _handleModalInput(e) {
+        const { key, value } = e.detail;
+        if (key) {
+            this.updateData({ [key]: value });
+        }
+    }
+
+    _handleModalAction(e) {
+        // This method is intended to be overridden by child cards
+        // that have specific actions in their settings modals.
+        console.log('Modal action received by base card:', e.detail.action);
+    }
+
+
+    // Replace the existing _openSettingsModal method with this one
     _openSettingsModal() {
         const config = this.getSettingsConfig();
-        // If a card has no config, do nothing.
-        if (!config) return;
+        if (!config) {
+            console.warn(`No settings configuration found for card type: ${this.data.type}`);
+            return;
+        }
 
-        // The Modal takes the title, the config object, the card's current data,
-        // and a callback function to save the updated data.
-        const capitalizeFirstLetter = (string) => {
-            if (!string) return '';
-            return string.charAt(0).toUpperCase() + string.slice(1);
-        };
+        const capitalizeFirstLetter = (string) => string ? string.charAt(0).toUpperCase() + string.slice(1) : '';
         const modalTitle = `${capitalizeFirstLetter(this.data.type)} Settings`;
-        this.settingsModal = new Modal(
-            modalTitle,
-            config,
-            this.data,
-            this.commands,
-            this.allCommands,
-            (newData) => this._onSettingsSave(newData) // Pass the updateData method as the save callback
-        );
-        this.settingsModal.open();
+
+        const modalData = { ...this.data, allCommands: this.allCommands };
+
+        // Pass this.data to the modal constructor
+        this.settingsModal = new Modal(modalTitle, config, modalData);
+        
+        // Listen for events from the modal
+        this.settingsModal.modalElement.addEventListener('modal-input', this._handleModalInput.bind(this));
+        this.settingsModal.modalElement.addEventListener('modal-action', this._handleModalAction.bind(this));
     }
 
     /**
-    *
-    * The base implementation calls updateData with the new data.
-    * @param {object} newData The fresh data from the modal.
+    * Child cards MUST implement this if they have settings.
+    * @returns {object | null} The configuration object for the modal.
     */
-    _onSettingsSave(newData){
-        this.updateData(newData);
-    }
-
-    /**
- * Child cards MUST implement this if they have settings.
- * @returns {object | null} The configuration object for the modal.
- */
     getSettingsConfig() {
         throw new error('Child class must implement getSettingsConfig method if they have settings.');
     }
 
     //#endregion
 
-// ============= COMMAND LOGIC =================
-//#region Command Logic
+    // ============= COMMAND LOGIC =================
+    //#region Command Logic
 
     _rebuildCommands() {
         this.commands = [];
@@ -249,6 +256,10 @@ export class Card {
 
     refreshAvailableCommands(allCommands) {
         this.allCommands = allCommands;
+        if (this.settingsModal) {
+            this.settingsModal.data.allCommands = allCommands; // Pass the new data
+            this.settingsModal.rebuild();
+        }
         // This calls the function provided by the subclass (e.g., populateCommandSelectors).
         this.onCommandsChanged(this.allCommands);
     }

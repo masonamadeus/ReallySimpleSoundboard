@@ -32,7 +32,6 @@ export function reducer(state, action) {
             // Return a new state object with the new data structures
             return { ...state, allCards: newAllCards, layout: newLayout };
         }
-        
 
         // CARD REMOVED
         case MSG.is.CARD_REMOVED: {
@@ -48,6 +47,42 @@ export function reducer(state, action) {
             
             // Return a new state object with the new data structures
             return { ...state, allCards: newAllCards, layout: newLayout };
+        }
+
+        // MOVE CARD
+        case MSG.is.REQUEST_MOVE_CARD: {
+            const { cardId, newParentId, newIndex } = action.payload;
+
+            // 1. Create a deep, rehydrated copy of the layout to ensure we don't mutate the original state.
+            const newLayout = Layout.rehydrate(JSON.parse(JSON.stringify(state.layout)));
+
+            // 2. Find the specific node that needs to be moved within the new layout copy.
+            const { node } = newLayout.findNodeAndParent(cardId);
+
+            if (node) {
+                // 3. Perform the move operation on the new copy.
+                newLayout.removeNode(cardId);
+                newLayout.insertNode(node, newParentId, newIndex);
+            }
+
+            // 4. Return a new state object with the newly created layout.
+            return { ...state, layout: newLayout };
+        }
+
+
+        // RESIZE CARD
+        case MSG.is.CARD_RESIZED: {
+            const { cardId, newGridSpan } = action.payload;
+            
+            // Create a deep copy for immutable update
+            const newLayout = Layout.rehydrate(JSON.parse(JSON.stringify(state.layout)));
+            const nodeToUpdate = newLayout.findNode(cardId);
+            
+            if (nodeToUpdate) {
+                nodeToUpdate.gridSpan = newGridSpan;
+            }
+
+            return { ...state, layout: newLayout };
         }
 
         // LAYOUT UPDATED

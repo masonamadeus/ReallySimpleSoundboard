@@ -54,6 +54,7 @@ export class EventManager {
             INITIALIZE_STATE: 'state:initialize',
             CARD_ADDED: 'state:cardAdded',
             CARD_REMOVED: 'state:cardRemoved',
+            CARD_RESIZED: 'state:cardResized',
             LAYOUT_UPDATED: 'state:layoutUpdated',
             REARRANGE_MODE_TOGGLED: 'state:rearrangeModeToggled',
         };

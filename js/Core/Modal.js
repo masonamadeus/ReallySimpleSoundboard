@@ -1,11 +1,12 @@
+import { debounce } from '../Core/helper-functions.js';
+// we shoudl do debouncing here
+
+
 export class Modal {
-    constructor(title, config, data, commands, allCommands, onSave) {
+    constructor(title, config, data) {
         this.title = title;
         this.config = config;
         this.data = data;
-        this.commands = commands; // Commands specific to the card
-        this.allCommands = allCommands; // All commands across all cards
-        this.onSave = onSave; // Main save callback for form inputs
         this.modalElement = this._createModalElement();
         this._buildForm();
         this._attachGlobalListeners();
@@ -13,34 +14,33 @@ export class Modal {
 
     _createModalElement() {
         const modal = document.createElement('div');
-        modal.className = 'modal'; // Keep this for the backdrop
+        modal.className = 'modal';
+        modal.style.display = 'flex'; // Modals are visible by default now
         modal.innerHTML = `
-        <div class="modal-content rss-modal">
-            <div class="modal-header">
-                <h3>${this.title}</h3>
+            <div class="modal-content rss-modal">
+                <div class="modal-header">
+                    <h3>${this.title}</h3>
+                </div>
+                <div class="modal-form-content"></div>
+                <div class="modal-actions-row">
+                     <button class="modal-close-btn highlight-color">Close</button>
+                </div>
             </div>
-            <div class="modal-form-content"></div>
-            <div class="modal-actions-row">
-                 <button class="modal-close-btn highlight-color">Close</button>
-            </div>
-        </div>
-    `;
+        `;
 
         modal.addEventListener('mousedown', (e) => {
-            if (e.target === modal) {
-                this.close();
-            }
+            if (e.target === modal) this.close();
         });
 
-        modal.querySelector('.modal-close-btn').addEventListener('click', () => {
-            this.close();
-        });
-
+        modal.querySelector('.modal-close-btn').addEventListener('click', () => this.close());
+        document.body.appendChild(modal);
         return modal;
     }
 
     _buildForm() {
         const formContent = this.modalElement.querySelector('.modal-form-content');
+        formContent.innerHTML = ''; // Clear existing content
+
         this.config.forEach(section => {
             const sectionEl = document.createElement('div');
             sectionEl.className = 'modal-section';
@@ -53,9 +53,8 @@ export class Modal {
             section.groups.forEach(group => {
                 const groupEl = document.createElement('div');
                 groupEl.className = `modal-form-group modal-group-${group.type || 'default'}`;
-                
                 group.controls.forEach(control => {
-                    const controlEl = this._createControl(control, group);
+                    const controlEl = this._createControl(control);
                     if (controlEl) groupEl.appendChild(controlEl);
                 });
                 sectionEl.appendChild(groupEl);
@@ -64,28 +63,23 @@ export class Modal {
         });
     }
 
-    _createControl(control, group) {
-        const key = control.key;
-        const value = control.value !== undefined? control.value : this.data[key];
+    _createControl(control) {
+        // The value from the card's data for this specific control
+        const value = this.data[control.key];
         const container = document.createElement('div'); // A container for the control and its label
 
-        // Use a switch for clarity and extensibility
         switch (control.type) {
             case 'text':
-
             case 'color': {
                 const input = document.createElement('input');
                 input.type = control.type;
-                input.dataset.key = key;
-
-                // For color, the value needs to be a hex code, not a CSS variable
+                input.dataset.key = control.key;
+                input.value = value;
+                // Handle CSS variables for color pickers
                 if (control.type === 'color' && String(value).startsWith('var(')) {
                     const cssVarName = value.match(/--[\w-]+/)[0];
                     input.value = getComputedStyle(document.documentElement).getPropertyValue(cssVarName).trim();
-                } else {
-                    input.value = value;
                 }
-                
                 return input;
             }
 
@@ -93,176 +87,140 @@ export class Modal {
                 const label = document.createElement('label');
                 const input = document.createElement('input');
                 input.type = 'checkbox';
-                input.dataset.key = key;
+                input.dataset.key = control.key;
                 input.checked = value;
                 label.appendChild(input);
-                label.append(` ${control.label}`); // Add text after the checkbox
+                label.append(` ${control.label}`); // Use append to add text after the element
                 return label;
             }
-            
+
             case 'button': {
                 const button = document.createElement('button');
                 button.textContent = control.label;
-                button.className = control.class || 'accent-color'; // Default class
-                button.dataset.action = control.action; // For the event listener
+                button.className = control.class || 'accent-color';
+                button.dataset.action = control.action; // Use data-action for events
                 return button;
             }
 
             case 'range': {
-                const group = document.createElement('div');
-                group.className = 'slider-group';
-
-                const labelEl = document.createElement('label');
-                labelEl.textContent = control.label;
-                group.appendChild(labelEl);
-
+                container.className = 'slider-group';
+                const label = document.createElement('label');
+                label.textContent = control.label;
                 const input = document.createElement('input');
                 input.type = 'range';
-                input.dataset.key = key;
+                input.dataset.key = control.key;
                 input.min = control.min || 0;
                 input.max = control.max || 100;
                 input.step = control.step || 1;
                 input.value = value;
-                group.appendChild(input);
-
-                // Optional value display
-                if (control.showValue) {
-                    const valueSpan = document.createElement('span');
-                    valueSpan.className = 'slider-value';
-                    valueSpan.dataset.key = key; // Link to the input
-                    valueSpan.textContent = value;
-                    group.appendChild(valueSpan);
-                }
-                return group;
+                const valueSpan = document.createElement('span');
+                valueSpan.className = 'slider-value';
+                valueSpan.dataset.key = control.key;
+                valueSpan.textContent = value;
+                container.appendChild(label);
+                container.appendChild(input);
+                container.appendChild(valueSpan);
+                return container;
             }
 
             case 'select': {
-                const container = document.createElement('div');
-                container.className = 'timer-sound-select'; // Use existing styles
-
+                container.className = 'select-group';
                 const label = document.createElement('label');
                 label.textContent = control.label;
-                container.appendChild(label);
-
                 const select = document.createElement('select');
                 select.dataset.key = control.key;
-                // Use the appropriate class from your CSS
-                select.className = control.key === 'startAction' ? 'timer-start-action' : 'timer-end-action';
 
-
-                // Add a "None" option by default
-                select.add(new Option("None", ""));
-
-                this.allCommands.forEach(command => {
-                    // The logic to prevent a card from triggering itself is now more robust,
-                    // as it compares against the card's actual ID from the data object.
-                    if (command.targetCard === this.data.id) return;
-                    select.add(new Option(command.name, command.id));
+                (control.options || []).forEach(opt => {
+                    const option = new Option(opt.label, opt.value);
+                    select.add(option);
                 });
 
-                // The value is still sourced from the card's data.
-                select.value = this.data[control.key]?.commandId || "";
+                select.value = value || '';
+                container.appendChild(label);
+                container.appendChild(select);
+                return container;
+            }
+
+            case 'command-select': {
+                container.className = 'select-group';
+                 const label = document.createElement('label');
+                label.textContent = control.label;
+                const select = document.createElement('select');
+                select.dataset.key = control.key;
+                // Add a default "None" option
+                const defaultOption = new Option('None', '');
+                select.add(defaultOption);
+                // Populate from all available commands
+                this.data.allCommands.forEach(cmd => {
+                    const option = new Option(cmd.name, cmd.id);
+                    select.add(option);
+                });
+                select.value = value?.commandId || '';
+                container.appendChild(label);
                 container.appendChild(select);
                 return container;
             }
 
             case 'radio': {
-                const group = document.createElement('div');
-                group.className = 'modal-radio-group';
-                control.options.forEach(option => {
+                // Radio buttons are grouped by their 'key'. The container is created by the group.
+                (control.options || []).forEach(opt => {
                     const label = document.createElement('label');
                     const input = document.createElement('input');
                     input.type = 'radio';
-                    input.name = key;
-                    input.dataset.key = key;
-                    input.value = option.value;
-                    if (value === option.value) {
+                    input.dataset.key = control.key;
+                    input.name = control.key; // This groups the radio buttons
+                    input.value = opt.value;
+                    if (opt.value === value) {
                         input.checked = true;
                     }
                     label.appendChild(input);
-                    label.append(` ${option.label}`);
-                    group.appendChild(label);
+                    label.append(` ${opt.label}`);
+                    container.appendChild(label);
                 });
-                return group;
+                return container;
             }
 
             case 'list': {
                 const listContainer = document.createElement('ul');
-                listContainer.className = 'file-list'; // Use the same class for consistent styling
-                
-                const items = this.data[control.itemSource] || []; // e.g., this.data['files']
+                listContainer.className = 'file-list';
+                const items = this.data[control.itemSource] || [];
                 if (items.length === 0) {
                     listContainer.innerHTML = `<li><small>${control.emptyMessage || 'No items.'}</small></li>`;
-                    return listContainer;
-                }
-
-                items.forEach((item, index) => {
-                    const listItem = document.createElement('li');
-                    
-                    const titleSpan = document.createElement('span');
-                    titleSpan.textContent = item[control.itemTitleKey]; // e.g., item['fileName']
-                    listItem.appendChild(titleSpan);
-
-                    if (control.actions && control.actions.length > 0) {
-                        const buttonContainer = document.createElement('div');
-                        buttonContainer.className = 'theme-list-buttons'; // Use theme list class for styling
-
+                } else {
+                    items.forEach((item, index) => {
+                        const li = document.createElement('li');
+                        li.textContent = item[control.itemTitleKey] || `Item ${index + 1}`;
                         control.actions.forEach(action => {
                             const button = document.createElement('button');
                             button.textContent = action.label;
-                            button.className = action.class || 'accent-color';
+                            button.className = action.class || '';
                             button.dataset.action = action.action;
-                            // Use the index as a reliable way to identify the item
-                            button.dataset.itemIndex = index; 
-                            buttonContainer.appendChild(button);
+                            button.dataset.itemIndex = index; // Critical for identifying which item was clicked
+                            li.appendChild(button);
                         });
-                        listItem.appendChild(buttonContainer);
-                    }
-                    listContainer.appendChild(listItem);
-                });
-
+                        listContainer.appendChild(li);
+                    });
+                }
                 return listContainer;
             }
+        }
+        return null;
+    }
 
-            case 'custom-html': {
-                const div = document.createElement('div');
-                // The config can provide a function that returns the HTML string or a DOM element
-                if (typeof control.content === 'function') {
-                    div.innerHTML = control.content(this.data);
-                } else {
-                    div.innerHTML = control.content || '';
-                }
-                return div;
-            }
-            
-            default: {
-                return null;
-            }
+    /**
+     * Re-renders the modal's form content. Useful for dynamic lists.
+     */
+    rebuild() {
+        this._buildForm();
+    }
+
+    close() {
+        if (this.modalElement) {
+            this.modalElement.remove();
+            this.modalElement = null;
         }
     }
 
-    _save() {
-        const newData = { ...this.data };
-        this.modalElement.querySelectorAll('[data-key]').forEach(input => {
-            const key = input.dataset.key;
-
-            if (input.tagName === 'SPAN') return;
-
-            if (input.type === 'checkbox') {
-                newData[key] = input.checked;
-            } else if (input.tagName === 'SELECT') {
-                newData[key] = input.value;
-            } else if (input.type === 'radio') {
-                if (input.checked) {
-                    newData[key] = input.value;
-                }
-            } else {
-                newData[key] = input.value;
-            }
-        });
-        this.onSave(newData);
-    }
-    
     _attachGlobalListeners() {
         this.modalElement.addEventListener('click', (e) => {
             if (e.target === this.modalElement) this.close();
@@ -270,102 +228,48 @@ export class Modal {
             const button = e.target.closest('button[data-action]');
             if (button) {
                 const action = button.dataset.action;
-                const itemIndex = button.dataset.itemIndex; // Check if it's a list item action
+                const itemIndex = button.dataset.itemIndex;
 
-                // If it's a list action, find the list config and fire its callback
-                if (itemIndex !== undefined) {
-                    for (const section of this.config) {
-                        for (const group of section.groups) {
-                            const listControl = group.controls.find(c => c.type === 'list');
-                            if (listControl) {
-                                const actionConfig = listControl.actions.find(a => a.action === action);
-                                if (actionConfig && typeof actionConfig.onClick === 'function') {
-                                    // Pass the modal instance AND the specific item's index
-                                    actionConfig.onClick(this, parseInt(itemIndex, 10));
-                                }
-                            }
-                        }
+                // Dispatch a custom event for any action button click
+                this.modalElement.dispatchEvent(new CustomEvent('modal-action', {
+                    bubbles: true,
+                    composed: true,
+                    detail: {
+                        action: action,
+                        itemIndex: itemIndex ? parseInt(itemIndex, 10) : undefined
                     }
-                } else {
-                    // Handle general modal buttons (like Save, Delete Card, etc.)
-                     for (const section of this.config) {
-                        for (const group of section.groups) {
-                            const control = group.controls.find(c => c.action === action);
-                            if (control && typeof control.onClick === 'function') {
-                                control.onClick(this);
-                            }
-                        }
-                    }
-                }
+                }));
             }
         });
 
-        // Add a general input listener to trigger the main onSave function for form elements
+        // Add a general input listener to dispatch an event on any form change
         this.modalElement.addEventListener('input', (e) => {
             const input = e.target.closest('[data-key]');
             if (input) {
+                const key = input.dataset.key;
+                let value;
+
+                if (input.type === 'checkbox') {
+                    value = input.checked;
+                } else {
+                    value = input.value;
+                }
+                
+                // Dispatch a custom event with the key and new value
+                this.modalElement.dispatchEvent(new CustomEvent('modal-input', {
+                    bubbles: true,
+                    composed: true,
+                    detail: { key, value }
+                }));
+
                 // If it's a range slider with a value display, update it
                 if (input.type === 'range') {
-                    const valueSpan = this.modalElement.querySelector(`.slider-value[data-key="${input.dataset.key}"]`);
+                    const valueSpan = this.modalElement.querySelector(`.slider-value[data-key="${key}"]`);
                     if (valueSpan) {
-                        valueSpan.textContent = input.value;
+                        valueSpan.textContent = value;
                     }
                 }
-                this._save();
             }
         });
-    }
-
-    // Public method to allow external code to refresh parts of the modal
-    rebuild() {
-        this.modalElement.querySelector('.modal-form-content').innerHTML = '';
-        this._buildForm();
-    }
-
-    refresh(controlKey, data) {
-        // Find the specific control element in the modal to refresh
-        const controlToRefresh = this.modalElement.querySelector(`[data-key="${controlKey}"]`);
-        if (!controlToRefresh) return;
-
-        // Find the parent group of the control
-        const groupEl = controlToRefresh.closest('.modal-form-group');
-        if (!groupEl) return;
-
-        // Find the control's configuration from the original config object
-        let controlConfig = null;
-        for (const section of this.config) {
-            for (const group of section.groups) {
-                const foundControl = group.controls.find(c => c.key === controlKey || c.itemSource === controlKey);
-                if (foundControl) {
-                    controlConfig = foundControl;
-                    break;
-                }
-            }
-            if (controlConfig) break;
-        }
-
-        if (!controlConfig) return;
-
-        // Update the modal's internal data before redrawing the control
-        this.data = data;
-        
-        // Create the new, updated control element
-        const newControlEl = this._createControl(controlConfig, groupEl);
-
-        // Replace the old control's container with the new one
-        const parentContainer = controlToRefresh.parentElement;
-        parentContainer.replaceWith(newControlEl);
-    }
-
-    open() {
-        document.body.appendChild(this.modalElement);
-        this.modalElement.style.display = 'flex';
-    }
-
-    close() {
-        if(this.modalElement) {
-            this.modalElement.remove();
-            this.modalElement = null;
-        }
     }
 }

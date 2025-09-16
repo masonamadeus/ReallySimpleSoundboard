@@ -1,4 +1,4 @@
-import { SoundboardManager } from './Managers/SoundboardManager.js';
+import { SoundboardController } from './Managers/SoundboardController.js';
 import { SoundboardDB } from './Core/SoundboardDB.js';
 import { CardRegistry } from './Core/CardRegistry.js';
 import { ThemeManager } from './Managers/ThemeManager.js';
@@ -76,14 +76,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     await defaultDb.openDB();
 
     // --- Instantiate all managers, passing the API to UI managers ---
-    const soundboardManager = new SoundboardManager(db);
-    const themeManager = new ThemeManager(soundboardManager.managerAPI);
+    const soundboardController = new SoundboardController(db);
+    const themeManager = new ThemeManager();
     const gridManager = new GridManager();
     const controlDockManager = new ControlDockManager();
-    const dataManager = new DataManager(soundboardManager.managerAPI);
+    const dataManager = new DataManager();
 
     // 2. Set the SoundboardManager's dependencies so it knows about the UI managers
-    soundboardManager.setDependencies({
+    soundboardController.setDependencies({
         themeManager,
         gridManager,
         controlDockManager,
@@ -100,18 +100,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     await dataManager.init(
         db,
         defaultDb,
-        cardRegistry
+        cardRegistry,
     )
 
     await gridManager.init(
         document.getElementById('soundboard-grid'), 
-        document.getElementById('control-dock')
+        document.getElementById('control-dock'),
     );
 
     await controlDockManager.init(
         document.getElementById('control-dock'), 
         document.querySelectorAll('.control-dock-card'), 
-        cardRegistry);
+        cardRegistry,
+    );
 
     // Add the current board to the master list if it's not already there.
     const urlParams = new URLSearchParams(window.location.search);
@@ -119,6 +120,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await dataManager.addBoardId(currentBoardId);
 
     // 4. NOW, load the data. The UI managers are ready to catch the events.
-    await soundboardManager.load();
+    await soundboardController.load();
 });
 
