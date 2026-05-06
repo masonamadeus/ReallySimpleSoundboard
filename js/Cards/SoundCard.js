@@ -2,6 +2,23 @@ import { getAudioDuration, getContrastColor, debounce, randomButNot, lerp } from
 import { AudioPlayer } from '../Core/AudioPlayer.js';
 import { Card } from './BaseCard.js';
 import { MSG } from '../Core/MSG.js';
+import { Modal } from '../Core/Modal.js';
+import {store} from '../Core/StateStore.js';
+
+// Setup a global WebRTC peer to talk to OBS
+const peer = new Peer();
+let obsConnection = null;
+
+peer.on('open', () => {
+    // Connect to the specific ID we will assign to the OBS overlay
+    obsConnection = peer.connect('bmrss-obs-overlay-v1');
+    
+    obsConnection.on('open', () => {
+        console.log("Connected to OBS Overlay!");
+    });
+});
+
+const globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 /**
  * Represents a single sound card (sound button) component in the soundboard grid.
@@ -20,6 +37,7 @@ export class SoundCard extends Card {
             loop: false,
             priority: false,
             autoplay: false,
+            showOverlay: false,
             files: [],
             duckFactor: 0.4, // how much to duck under priority
             duckSpeed: 350, // how long to lerp in ms
@@ -54,6 +72,21 @@ export class SoundCard extends Card {
             onEnded: this.onEnded.bind(this),
             onFlagFired: this.onFlagFired.bind(this),
         })
+
+        this.analyser = globalAudioCtx.createAnalyser();
+        this.analyser.fftSize = 256;
+        this.analyser.smoothingTimeConstant = 0.8;
+        
+        try {
+            // Route this specific card's audio through our analyzer
+            this.mediaSource = globalAudioCtx.createMediaElementSource(this.player.audio);
+            this.mediaSource.connect(this.analyser);
+            this.analyser.connect(globalAudioCtx.destination);
+        } catch(e) {
+            console.error("Audio Routing Error:", e);
+        }
+        
+        this.isMonitoringOverlay = false; // Tracks the loop state
 
         this.currentFileIndex = -1;
 
@@ -213,11 +246,79 @@ export class SoundCard extends Card {
         this.elements.speedDisplay.textContent = `${Number(this.data.playbackRate).toFixed(1)}x`;
     }
 
+    startOverlayMonitor() {
+        this.isMonitoringOverlay = true;
+        let silenceTimer = 0;
+        let lastFrameTime = performance.now();
+        const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+
+        const BED_VOLUME_THRESHOLD = 110; // 0-255 (Adjust if it hides too early/late)
+        const TIME_TO_WAIT_MS = 2000; 
+
+        const checkLevel = () => {
+            if (!this.isMonitoringOverlay) return;
+
+            const now = performance.now();
+            const deltaTime = now - lastFrameTime;
+            lastFrameTime = now;
+
+            this.analyser.getByteFrequencyData(dataArray);
+            
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+            let averageVolume = sum / dataArray.length;
+
+            if (averageVolume <= BED_VOLUME_THRESHOLD) {
+                silenceTimer += deltaTime;
+                if (silenceTimer >= TIME_TO_WAIT_MS) {
+                    
+                    // IT'S QUIET! TELL OBS TO HIDE THE GRAPHIC!
+                    if (obsConnection && obsConnection.open) {
+                        obsConnection.send({ action: 'stop_overlay', cardId: this.id });
+                    }
+                    this.isMonitoringOverlay = false; 
+                    return; 
+                }
+            } else {
+                silenceTimer = 0; 
+            }
+
+            requestAnimationFrame(checkLevel);
+        };
+        
+        requestAnimationFrame(checkLevel);
+    }
+
+ 
+
+    // Helper to render the file list inside the settings modal
+    _renderSettingsFileList(listElement) {
+        listElement.innerHTML = ''; // Clear it out
+        if (this.data.files.length === 0) {
+            listElement.innerHTML = `<li><small>No audio files yet.</small></li>`;
+            return;
+        }
+
+        this.data.files.forEach((file, index) => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+            <span>${file.fileName}</span>
+            <button class="danger remove-file-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Remove</button>
+        `;
+
+            // Attach listener directly to this specific remove button
+            li.querySelector('.remove-file-btn').addEventListener('click', () => {
+                this._handleRemoveFile(index);
+                this._renderSettingsFileList(listElement); // Re-render list after removal
+            });
+
+            listElement.appendChild(li);
+        });
+    }
 
 
     destroy() {
         this.player.destroy();
-        this.closeSettings();
         clearTimeout(this.duckStartTimeout);
         MSG.off(MSG.is.SOUNDCARD_PRIORITY_STARTED, this.boundPriorityPlayHandler);
         MSG.off(MSG.is.SOUNDCARD_PRIORITY_ENDED, this.boundPriorityStopHandler);
@@ -299,45 +400,68 @@ export class SoundCard extends Card {
 
     async playFile(fileIndex) {
         const fileData = this.data.files[fileIndex];
-        if (!fileData) {
-            console.error(`File not found at index ${fileIndex} for button ${this.data.id}`);
-            return;
+        if (!fileData) return;
+
+        // 1. Instantly beam the audio binary, color, and TITLE to OBS via WebRTC
+        if (this.data.showOverlay && obsConnection && obsConnection.open) {
+            obsConnection.send({
+                action: 'trigger_overlay',
+                color: this.data.color, 
+                cardTitle: this.data.title, 
+                audioBuffer: fileData.arrayBuffer 
+            });
         }
 
-        try {
-            await this.player.play(fileData.arrayBuffer, {
-                volume: this.data.volume,
-                playbackRate: this.data.playbackRate,
-                flagOffsetMs: this.data.unduckOffsetMs
-            });
-        } catch (error) {
-            console.error("Error during playback:", error)
-        }
+        // 2. Delay the audible playback to the streamer/mixer by 800ms
+        setTimeout(async () => {
+            try {
+                await this.player.play(fileData.arrayBuffer, {
+                    volume: this.data.volume,
+                    playbackRate: this.data.playbackRate,
+                    flagOffsetMs: this.data.unduckOffsetMs
+                });
+            } catch (error) {
+                console.error("Error during playback:", error)
+            }
+        }, 0); 
     }
 
     onPlay() {
-         if (this.data.priority) {
-        // Always clear any lingering timeout from a previous, uncompleted play attempt
-        clearTimeout(this.duckStartTimeout);
+        // Wake up audio context (browsers require this)
+        if (globalAudioCtx.state === 'suspended') {
+            globalAudioCtx.resume();
+        }
 
-        // Set a timeout to DELAY the start of the ducking process
-        this.duckStartTimeout = setTimeout(() => {
-            this.priorityActive = true;
-            MSG.say(MSG.is.SOUNDCARD_PRIORITY_STARTED, { cardId: this.id });
-        }, this.data.duckOffsetMs);
-    }
+        // Trigger the volume detection!
+        if (this.data.showOverlay) {
+            this.startOverlayMonitor();
+        }
+
+        if (this.data.priority) {
+            clearTimeout(this.duckStartTimeout);
+            this.duckStartTimeout = setTimeout(() => {
+                this.priorityActive = true;
+                MSG.say(MSG.is.SOUNDCARD_PRIORITY_STARTED, { cardId: this.id });
+            }, this.data.duckOffsetMs);
+        }
     }
 
     onStop() {
-        // This is now the master cleanup handler for all stop scenarios.
+        // Kill the analyzer loop
+        this.isMonitoringOverlay = false;
 
-        // 1. Always clear the start timeout. If it hasn't fired yet, this prevents it from ever firing.
         clearTimeout(this.duckStartTimeout);
 
-        // 2. If priority mode was successfully activated, send the "ended" signal.
-        // This acts as a reliable fallback for manual stops.
+        // Tell OBS to shrink away (Your existing code already does this nicely!)
+        if (obsConnection && obsConnection.open) {
+            obsConnection.send({
+                action: 'stop_overlay',
+                cardId: this.id
+            });
+        }
+
         if (this.data.priority && this.priorityActive) {
-            this.priorityActive = false; // Prevent this from firing again
+            this.priorityActive = false; 
             MSG.say(MSG.is.SOUNDCARD_PRIORITY_ENDED, { cardId: this.id });
         }
     }
@@ -442,121 +566,90 @@ export class SoundCard extends Card {
     }
 
     //#endregion
+    
     // ==========================================================================================================
     // #region SETTINGS MODAL
     // ==================================
 
-    getSettingsConfig() {
-        return [
-            {
-                title: 'Button Settings',
-                groups: [
-                    {
-                        type: 'title-and-color',
-                        controls: [
-                            { type: 'color', key: 'color' },
-                            { type: 'text', key: 'title' }
-                        ]
-                    },
-                    {
-                        type: 'checkbox-group',
-                        controls: [
-                            { type: 'checkbox', key: 'shuffle', label: 'Random' },
-                            { type: 'checkbox', key: 'autoplay', label: 'Autoplay' },
-                            { type: 'checkbox', key: 'priority', label: 'Priority' },
-                            { type: 'checkbox', key: 'loop', label: 'Loop' }
-                        ]
-                    }
-                ]
-            },
-            {
-                title: 'Audio Files',
-                groups: [
-                    {
-                        type: 'actions-row', // A row for action buttons
-                        controls: [
-                             {
-                                type: 'button',
-                                label: 'Add Audio File',
-                                action: 'add-file', // Action identifier
-                                class: 'accent-color'
-                            },
-                             {
-                                type: 'button',
-                                label: 'Clear All',
-                                action: 'clear-files', // Action identifier
-                                class: 'highlight-color'
-                            }
-                        ]
-                    },
-                    {
-                        type: 'list', // The list of files
-                        controls: [
-                            {
-                                type: 'list',
-                                key: 'files',
-                                itemSource: 'files',
-                                itemTitleKey: 'fileName',
-                                emptyMessage: 'No audio files yet.',
-                                actions: [
-                                    {
-                                        label: 'Remove',
-                                        action: 'remove-file', // Action identifier for list items
-                                        class: 'danger'
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                ]
-            },
-            {
-                title: 'Danger Zone',
-                groups: [
-                    {
-                        type: 'actions-row',
-                        controls: [
-                            {
-                                type: 'button',
-                                label: 'Delete Button',
-                                action: 'delete-card', // Action identifier
-                                class: 'danger'
-                            }
-                        ]
-                    }
-                ]
-            }
-        ];
-    }
+    /**
+     * Overrides BaseCard's method to provide the custom DOM for SoundCard settings.
+     */
+    getSettingsDOM() {
+        // 1. Clone the template
+        const template = document.getElementById('sound-settings-template');
+        const settingsDOM = template.content.cloneNode(true);
 
-    _handleModalAction(e) {
-        const { action, itemIndex } = e.detail;
-        switch (action) {
-            case 'delete-card':
-                this._handleDeleteCard();
-                break;
-            case 'add-file':
-                this._handleAddFileClick();
-                break;
-            case 'clear-files':
-                this._handleClearFiles();
-                break;
-            case 'remove-file':
-                if (itemIndex !== undefined) {
-                    this._handleRemoveFile(itemIndex);
-                }
-                break;
+        // 2. Grab references to the UI elements
+        const titleInput = settingsDOM.querySelector('.setting-title');
+        const colorInput = settingsDOM.querySelector('.setting-color');
+        const shuffleCheck = settingsDOM.querySelector('.setting-shuffle');
+        const autoplayCheck = settingsDOM.querySelector('.setting-autoplay');
+        const priorityCheck = settingsDOM.querySelector('.setting-priority');
+        const loopCheck = settingsDOM.querySelector('.setting-loop');
+        const overlayCheck = settingsDOM.querySelector('.setting-overlay');
+        const fileListEl = settingsDOM.querySelector('.settings-file-list');
+
+        // 3. Populate current data
+        titleInput.value = this.data.title;
+        
+        let colorValue = this.data.color;
+        if (colorValue.startsWith('var(')) {
+            const cssVarName = colorValue.match(/--[\w-]+/)[0];
+            colorValue = getComputedStyle(document.documentElement).getPropertyValue(cssVarName).trim();
         }
+        colorInput.value = colorValue;
+
+        shuffleCheck.checked = this.data.shuffle;
+        autoplayCheck.checked = this.data.autoplay;
+        priorityCheck.checked = this.data.priority;
+        loopCheck.checked = this.data.loop;
+        overlayCheck.checked = this.data.showOverlay;
+
+        // 4. Attach DIRECT event listeners to inputs
+        titleInput.addEventListener('input', (e) => {
+            this.updateData({ title: e.target.value });
+            this.elements.buttonText.textContent = e.target.value; 
+        });
+
+        colorInput.addEventListener('input', (e) => {
+            this.updateData({ color: e.target.value });
+            this.elements.soundButton.style.backgroundColor = e.target.value;
+        });
+
+        shuffleCheck.addEventListener('change', (e) => this.updateData({ shuffle: e.target.checked }));
+        autoplayCheck.addEventListener('change', (e) => this.updateData({ autoplay: e.target.checked }));
+        priorityCheck.addEventListener('change', (e) => this.updateData({ priority: e.target.checked }));
+        loopCheck.addEventListener('change', (e) => this.updateData({ loop: e.target.checked }));
+        overlayCheck.addEventListener('change', (e) => this.updateData({ showOverlay: e.target.checked }));
+
+        // 5. Attach listeners to Buttons
+        settingsDOM.querySelector('.delete-card-btn').addEventListener('click', () => {
+            this._handleDeleteCard(); // Destroys the card and tells the manager
+            if (this.settingsModal) this.settingsModal.close(); // Close modal immediately
+        });
+
+        // NOTICE: We pass the fileListEl directly into these functions!
+        settingsDOM.querySelector('.add-file-btn').addEventListener('click', () => this._handleAddFileClick(fileListEl));
+        settingsDOM.querySelector('.clear-files-btn').addEventListener('click', () => this._handleClearFiles(fileListEl));
+
+        // 6. Initial render of the file list
+        this._renderSettingsFileList(fileListEl);
+
+        return settingsDOM;
     }
 
-    _handleAddFileClick() {
+    /**
+     * Fixes the add file logic by accepting the <ul> element and re-rendering it manually
+     */
+    _handleAddFileClick(fileListEl) {
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.accept = 'audio/*';
         fileInput.multiple = true;
+        
         fileInput.onchange = async (event) => {
             const files = Array.from(event.target.files);
-            const newFilesData = [...this.data.files]; // Create a new array
+            const newFilesData = [...this.data.files]; 
 
             for (const file of files) {
                 const arrayBuffer = await file.arrayBuffer();
@@ -565,28 +658,55 @@ export class SoundCard extends Card {
                 newFilesData.push(fileData);
             }
             
+            // Save data via MSG system
             await this.updateData({ files: newFilesData });
-            // The modal needs to be told to re-render the list
-            this.settingsModal.rebuild();
+            
+            // Re-render the HTML list instantly! No massive generic Modal.rebuild() needed.
+            this._renderSettingsFileList(fileListEl); 
         };
+        
         fileInput.click();
     }
 
-    async _handleRemoveFile(index) {
-        this.player.stop();
-        const newFiles = [...this.data.files];
-        newFiles.splice(index, 1);
-        await this.updateData({ files: newFiles });
-        this.settingsModal.rebuild();
-    }
-
-    async _handleClearFiles() {
+    async _handleClearFiles(fileListEl) {
         const confirmed = await MSG.confirm("Are you sure you want to clear all audio files for this button?");
         if (confirmed) {
             this.player.stop();
             await this.updateData({ files: [] });
-            this.settingsModal.rebuild();
+            this._renderSettingsFileList(fileListEl); // Manually clear the UI list
         }
+    }
+
+    async _handleRemoveFile(index, fileListEl) {
+        this.player.stop();
+        const newFiles = [...this.data.files];
+        newFiles.splice(index, 1);
+        await this.updateData({ files: newFiles });
+        this._renderSettingsFileList(fileListEl); // Manually re-render the UI list
+    }
+
+    _renderSettingsFileList(listElement) {
+        listElement.innerHTML = ''; 
+        
+        if (this.data.files.length === 0) {
+            listElement.innerHTML = `<li><small>No audio files yet.</small></li>`;
+            return;
+        }
+
+        this.data.files.forEach((file, index) => {
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <span>${file.fileName}</span>
+                <button class="danger remove-file-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Remove</button>
+            `;
+            
+            // Add a direct listener to the specific "remove" button for this file
+            li.querySelector('.remove-file-btn').addEventListener('click', () => {
+                this._handleRemoveFile(index, listElement);
+            });
+
+            listElement.appendChild(li);
+        });
     }
 
     //#endregion

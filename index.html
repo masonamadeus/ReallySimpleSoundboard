@@ -21,6 +21,7 @@
         content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
     <link rel="manifest" href="manifest.json">
     <link rel="stylesheet" href="css/bmrss.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <title>Soundboard | B&M Really Simple Soundboard</title>
 
 </head>
@@ -88,7 +89,53 @@
             
             <div class="resize-handle"></div>
         </div>
-    </template
+    </template>
+    <!-- TIMER SETTINGS MODAL -->
+    <template id="timer-settings-template">
+        <div class="timer-settings-wrapper">
+            <div class="modal-section">
+                <h4>Timer Details</h4>
+                <input type="text" class="setting-title" style="font-size: 1.25rem; margin-bottom: 1rem;">
+    
+                <div class="modal-radio-group" style="margin-bottom: 1rem;">
+                    <label><input type="radio" name="timer-mode" value="timer" class="setting-mode-timer"> Timer</label>
+                    <label><input type="radio" name="timer-mode" value="stopwatch" class="setting-mode-stopwatch">
+                        Stopwatch</label>
+                </div>
+    
+                <div class="slider-group">
+                    <label>Minutes:</label>
+                    <input type="number" class="setting-minutes" min="0" step="1"
+                        style="width: 70px; padding: 0.25rem; font-family: inherit;">
+                </div>
+                <div class="slider-group" style="margin-top: 0.5rem;">
+                    <label>Seconds:</label>
+                    <input type="number" class="setting-seconds" min="0" max="59" step="1"
+                        style="width: 70px; padding: 0.25rem; font-family: inherit;">
+                </div>
+    
+                <div class="modal-checkbox-group" style="margin-top: 1rem;">
+                    <label><input type="checkbox" class="setting-loop"> Auto Restart</label>
+                </div>
+            </div>
+    
+            <div class="modal-section">
+                <h4>Actions</h4>
+                <div class="select-group" style="margin-bottom: 0.5rem;">
+                    <label>Start with:</label>
+                    <select class="setting-start-action"></select>
+                </div>
+                <div class="select-group">
+                    <label>End with:</label>
+                    <select class="setting-end-action"></select>
+                </div>
+            </div>
+    
+            <div class="modal-section" style="border-top: 1px solid var(--secondary-color); padding-top: 1rem;">
+                <button class="delete-card-btn danger" style="width: 100%;">Delete Timer</button>
+            </div>
+        </div>
+    </template>
 
     <!-- SOUND CARD TEMPLATE -->
     <template id="sound-card-template">
@@ -116,44 +163,46 @@
                     <span class="speed-display">1.0x</span>
                 </div>
             </div>
-    
-            <div class="modal sound-settings-modal">
-                <div class="modal-content">
-                    <div class="modal-section">
-                        <h3>Button Settings</h3>
-                        <div class="title-and-color">
-                            <input type="color" class="button-color-picker" data-key="color">
-                            <input type="text" style="font-size: 1rem;" data-key="title" class="button-name-input">
-                        </div>
-                    </div>
-                    <div class="modal-section">
-                        <div class="modal-checkbox-group">
-                            <label><input type="checkbox" class="shuffle-checkbox" data-key="shuffle"> Random</label>
-                            <label><input type="checkbox" class="autoplay-checkbox" data-key="autoplay">
-                                Autoplay</label>
-                            <label><input type="checkbox" class="priority-checkbox" data-key="priority">
-                                Priority</label>
-                            <label><input type="checkbox" class="loop-checkbox" data-key="loop"> Loop</label>
-                        </div>
-                    </div>
-                    <div class="modal-section">
-                        <h3>Audio Files</h3>
-                        <div class="file-input-container">
-                            <label class="file-input-label">
-                                Add Audio File
-                                <input type="file" class="add-file-input" accept="audio/*" multiple style="display: none;">
-                            </label>
-                        </div>
-                        <ul class="file-list"></ul>
-                        <div class="modal-actions-row">
-                            <button class="delete-soundcard-btn danger">Delete Button</button>
-                            <button class="clear-files-btn highlight-color">Clear All</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
     </template>
+
+<!-- SOUND SETTINGS TEMPLATE -->
+    <template id="sound-settings-template">
+    <div class="sound-settings-wrapper">
+        <div class="modal-section">
+            <h4>Button Appearance</h4>
+            <div class="title-and-color">
+                <input type="color" class="setting-color">
+                <input type="text" class="setting-title" style="font-size: 1rem;">
+            </div>
+        </div>
+
+        <div class="modal-section">
+            <h4>Playback Options</h4>
+            <div class="modal-checkbox-group">
+                <label><input type="checkbox" class="setting-shuffle"> Random</label>
+                <label><input type="checkbox" class="setting-autoplay"> Autoplay</label>
+                <label><input type="checkbox" class="setting-priority"> Priority</label>
+                <label><input type="checkbox" class="setting-loop"> Loop</label>
+                <label><input type="checkbox" class="setting-overlay"> Show Overlay</label> 
+            </div>
+        </div>
+
+        <div class="modal-section">
+            <h4>Audio Files</h4>
+            <div class="modal-actions-row" style="margin-bottom: 1rem;">
+                <button class="add-file-btn accent-color">Add Audio File</button>
+                <button class="clear-files-btn highlight-color">Clear All</button>
+            </div>
+            <ul class="settings-file-list file-list">
+                </ul>
+        </div>
+
+        <div class="modal-section" style="border-top: 1px solid var(--secondary-color); padding-top: 1rem;">
+            <button class="delete-card-btn danger w-100">Delete This Button</button>
+        </div>
+    </div>
+</template>
 
     <!-- CONTROL DOCK -->
     <div id="control-dock">
@@ -169,8 +218,8 @@
                 <button id="rearrange-mode-btn" class="highlight-color">Rearrange</button>
                 <button id="cosmetics-btn" class="accent-color">Cosmetics</button>
                 <button id="board-switcher-btn" class="primary-color">Switch Board</button>
-                <button id="storage-data-btn" class="primary-color">Storage & Data</button>
-                <button id="manage-boards-btn" class="primary-color">Manage Boards</button>
+               <button id="storage-data-btn" style="display:none" class="primary-color">Storage & Data</button>
+                <button id="manage-boards-btn" style="display:none" class="primary-color">Manage Boards</button>
             </div>
         </div>
     </div>

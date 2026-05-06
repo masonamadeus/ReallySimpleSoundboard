@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OBS Overlay | RSS Stinger</title>
+<link href="https://fonts.googleapis.com/css?family=Wellfleet&display=swap" rel="stylesheet">
+
+<style>
+body {
+    margin: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Japers', sans-serif;
+
+    --theme-color: #ff914d;
+}
+
+/* ---------------- BACKGROUND WASH ---------------- */
+body::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: black;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+    pointer-events: none;
+    z-index: 1;
+}
+
+body.overlay-active::after {
+    opacity: 0.72;
+}
+
+/* ---------------- FX LAYERS ---------------- */
+.fx-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    pointer-events: none;
+    opacity: 0;
+    background: var(--theme-color);
+
+    will-change: transform, opacity, clip-path;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* ---------------- TRANSITIONS ---------------- */
+.trans-swipe #fx-layer-1 { opacity: 1; animation: fxSwipe 0.8s cubic-bezier(0.77,0,0.175,1) forwards; }
+@keyframes fxSwipe {
+    0% { clip-path: polygon(0 0,0 0,-20% 100%,-20% 100%); }
+    45%,55% { clip-path: polygon(0 0,120% 0,100% 100%,-20% 100%); }
+    100% { clip-path: polygon(120% 0,120% 0,100% 100%,100% 100%); opacity: 0; }
+}
+
+.trans-flash #fx-layer-1 { opacity: 1; clip-path: inset(0 0 0 0); animation: fxFlash 0.45s ease-out forwards; }
+@keyframes fxFlash { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+.trans-circle #fx-layer-1 { opacity: 1; animation: fxCircle 0.85s cubic-bezier(0.77,0,0.175,1) forwards; }
+@keyframes fxCircle {
+    0% { clip-path: circle(0% at 50% 50%); }
+    45%,55% { clip-path: circle(100% at 50% 50%); }
+    100% { clip-path: circle(120% at 50% 50%); opacity: 0; }
+}
+
+.trans-box #fx-layer-1 { opacity: 1; animation: fxBox 0.8s cubic-bezier(0.77,0,0.175,1) forwards; }
+@keyframes fxBox {
+    0% { clip-path: inset(50% 50% 50% 50%); }
+    45%,55% { clip-path: inset(0 0 0 0); }
+    100% { clip-path: inset(-10% -10% -10% -10%); opacity: 0; }
+}
+
+.trans-glitch #fx-layer-1 { opacity: 1; background: white; clip-path: inset(0 0 0 0); animation: fxGlitch 0.45s steps(1) forwards; }
+@keyframes fxGlitch {
+    0%,100% { opacity: 0; }
+    10%,30%,50%,70% { opacity: 1; transform: skewX(-20deg) scaleY(1.1); }
+    20%,40%,60% { opacity: 0.5; transform: skewX(20deg) scaleY(0.9); }
+}
+
+/* (Upgraded) Radial Burst with Spin */
+.trans-radialburst #fx-layer-1 {
+    opacity: 1;
+    background: repeating-conic-gradient(from 0deg, var(--theme-color) 0deg 15deg, transparent 15deg 30deg);
+    animation: fxRadial 0.9s ease forwards;
+}
+@keyframes fxRadial {
+    0% { transform: scale(0) rotate(0deg); opacity: 1; }
+    100% { transform: scale(3) rotate(45deg); opacity: 0; }
+}
+
+/* (Upgraded) Perfect Circle Shockwave */
+.trans-shockwave #fx-layer-1 {
+    opacity: 1;
+    animation: fxShockwave 0.7s ease-out forwards;
+}
+@keyframes fxShockwave {
+    0% { clip-path: circle(0% at 50% 50%); opacity: 1; }
+    80% { opacity: 1; }
+    100% { clip-path: circle(150% at 50% 50%); opacity: 0; }
+}
+
+
+/* ---------------- CONTAINER ---------------- */
+#segment-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1000px;
+    height: 500px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7) rotate(-4deg);
+    transition: transform 0.55s cubic-bezier(0.175,0.885,0.32,1.275), opacity 0.35s ease;
+    will-change: transform, opacity;
+}
+
+#segment-container.show {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+}
+
+
+/* ---------------- SHAPE ---------------- */
+#shape-element {
+    position: absolute;
+    inset: 0;
+    background: var(--theme-color);
+    
+    /* THE BUG FIX: clip-path removed from here so shape classes can breathe! */
+
+    filter: drop-shadow(0px 20px 80px rgba(0,0,0,0.8)) drop-shadow(0px 0px 60px var(--theme-color));
+    will-change: transform, opacity, clip-path, filter;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    z-index: 1;
+}
+
+
+/* ---------------- TEXT ---------------- */
+#segment-title-text {
+    position: relative;
+    z-index: 5;
+    color: white;
+    font-size: 200px;
+    line-height: 1;
+    text-align: center;
+    max-width: 90%;
+    text-shadow:
+        4px 4px 0 rgba(0,0,0,0.8),
+        -3px -3px 0 rgba(0,0,0,0.8),
+        3px -3px 0 rgba(0,0,0,0.8),
+        -3px 3px 0 rgba(0,0,0,0.8),
+        0 8px 20px rgba(0,0,0,0.7);
+    animation: textFloat 2.5s ease-in-out infinite alternate;
+}
+
+
+/* ---------------- SHAPES ---------------- */
+.shape-burst { clip-path: polygon(44% 4%,55% 18%,76% 5%,72% 26%,95% 23%,82% 43%,99% 60%,82% 70%,93% 90%,73% 86%,63% 100%,50% 88%,34% 100%,27% 85%,6% 91%,15% 72%,0 54%,17% 41%,4% 20%,26% 25%,26% 5%); animation: wobble 2s ease-in-out infinite alternate; }
+.shape-blob { border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; animation: morph 3s linear infinite alternate; }
+.shape-star { clip-path: polygon(50% 0%,61% 35%,98% 35%,68% 57%,79% 91%,50% 70%,21% 91%,32% 57%,2% 35%,39% 35%); animation: spinWobble 6s linear infinite; }
+.shape-pill { border-radius: 999px; animation: squeeze 2s ease-in-out infinite alternate; }
+.shape-hexagon { clip-path: polygon(25% 0%,75% 0%,100% 50%,75% 100%,25% 100%,0% 50%); animation: wobble 3s ease-in-out infinite alternate; }
+.shape-diamond { clip-path: polygon(50% 0%,100% 50%,50% 100%,0% 50%); animation: pulseRotate 4s ease-in-out infinite alternate; }
+.shape-ticket { clip-path: polygon(0% 20%,10% 20%,10% 0%,90% 0%,90% 20%,100% 20%,100% 80%,90% 80%,90% 100%,10% 100%,10% 80%,0% 80%); animation: wobble 2s ease-in-out infinite alternate; }
+.shape-arrow { clip-path: polygon(0% 40%,60% 40%,60% 10%,100% 50%,60% 90%,60% 60%,0% 60%); animation: slideWobble 2s ease-in-out infinite alternate; }
+.shape-badge { clip-path: polygon(50% 0%,80% 10%,100% 35%,90% 70%,50% 100%,10% 70%,0% 35%,20% 10%); animation: wobble 3s ease-in-out infinite alternate; }
+.shape-ribbon { clip-path: polygon(0% 20%,85% 20%,100% 50%,85% 80%,0% 80%,10% 50%); animation: slideWobble 3s ease-in-out infinite alternate; }
+.shape-jagged { clip-path: polygon(0% 15%,10% 0%,20% 20%,30% 0%,40% 15%,50% 0%,60% 20%,70% 0%,80% 15%,90% 0%,100% 20%,100% 100%,0% 100%); animation: wobble 2s ease-in-out infinite alternate; }
+.shape-crown {
+    clip-path: polygon(0 0, 20% 30%, 50% 10%, 80% 30%, 100% 0, 100% 100%, 0 100%);
+    animation: pulseRotate 5s ease-in-out infinite alternate;
+}
+
+/* ---------------- ANIMATIONS ---------------- */
+@keyframes wobble { 0% { transform: rotate(-2deg) scale(0.98); } 100% { transform: rotate(2deg) scale(1.02); } }
+@keyframes morph { 0% { border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%; } 100% { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; } }
+@keyframes squeeze { 0% { transform: scale(1); } 100% { transform: scale(0.95,1.05); } }
+@keyframes spinWobble { 0% { transform: rotate(0deg) scale(0.95); } 50% { transform: rotate(180deg) scale(1.05); } 100% { transform: rotate(360deg) scale(0.95); } }
+@keyframes slideWobble { 0% { transform: skewX(-5deg); } 100% { transform: skewX(5deg); } }
+@keyframes pulseRotate { 0% { transform: scale(0.95) rotate(-2deg); } 100% { transform: scale(1.05) rotate(2deg); } }
+@keyframes textFloat { 0% { transform: translateY(-10px); } 100% { transform: translateY(10px); } }
+
+</style>
+</head>
+
+<body>
+<div id="fx-layer-1" class="fx-layer"></div>
+<div id="fx-layer-2" class="fx-layer"></div>
+
+<div id="segment-container">
+    <div id="shape-element"></div>
+    <div id="segment-title-text">Segment Name</div>
+</div>
+
+<script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+<script type="module" src="js/overlay.js"></script>
+
+</body>
+</html>

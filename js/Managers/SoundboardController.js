@@ -52,7 +52,6 @@ export class SoundboardController {
 
         const urlParams = new URLSearchParams(window.location.search);
         const boardId = urlParams.get('board') || 'default';
-        await this.dataManager.addBoardId(boardId);
 
         await this._loadBoardData();
         this._attachGlobalEventListeners();
@@ -133,6 +132,8 @@ export class SoundboardController {
             type: MSG.STATE_ACTIONS.CARD_REMOVED,
             payload: { cardId: cardIdToRemove }
         });
+
+        MSG.say(MSG.EVENTS.SOUNDBOARD_DELETED_CARD, { deletedId: cardIdToRemove })
         
         // Side Effect: Save the new layout.
         await this.saveLayout(store.getState().layout);
@@ -167,17 +168,11 @@ export class SoundboardController {
         const cardInstance = allCards.get(cardId);
         if (!cardInstance) return;
 
-        // Direct and local update of the card instance
+        const titleChanged = newData.title && newData.title !== cardInstance.data.title;
         cardInstance.data = { ...cardInstance.data, ...newData };
-        cardInstance.updateUI(); // The card itself updates its view
-
-        // Side Effect: Save the updated data to the database
+        cardInstance.updateUI();
         await this.db.save(cardId, cardInstance.data);
-
-        // Side Effect: Rebuild commands if needed (local concern)
-        if (newData.title && newData.title !== cardInstance.data.title) {
-            cardInstance._rebuildCommands();
-        }
+        if (titleChanged) cardInstance._rebuildCommands();
     }
 
     
@@ -214,9 +209,6 @@ export class SoundboardController {
     // #endregion
 
     // #region Layout
-    getLayout(){
-        return this.layout;
-    }
 
     /**
      * Saves the current layout state to the database
@@ -271,7 +263,8 @@ export class SoundboardController {
 
     handleCardCommand(command) {
         MSG.log(`SoundboardManager.handleCardCommand(${command})`)
-        const targetCard = this.allCards.get(command.targetCard);
+        const { allCards } = store.getState();
+        const targetCard = allCards.get(command.targetCard);
         if (targetCard && typeof targetCard[command.handler] === 'function') {
             // Use the properties directly from the command object
             return targetCard[command.handler](...(command.args || []));
@@ -438,43 +431,6 @@ export class SoundboardController {
     }
     // #endregion
 
-    // #region Migration & Compatibility
-    handleCardMigration(task) {
-        this.migrationQueue.push(task);
-        // If the processor isn't already running, kick it off.
-        if (!this.isMigrating) {
-            this.isMigrating = true;
-            console.log("Starting background data migration for audio durations...");
-            this._processMigrationQueue();
-        }
-    }
-
-    async _processMigrationQueue() { // currently this is only for the duration in the soundcards but will expand as needed
-        if (this.migrationQueue.length === 0) {
-            this.isMigrating = false;
-            console.log("Audio duration migration complete.");
-            this.broadcastAllCommands(); // Broadcast updated commands once done
-            return;
-        }
-
-        const task = this.migrationQueue.shift();
-        try {
-            
-            const durationInMs = await getAudioDuration(task.file.arrayBuffer);
-
-            // Update the data on the card instance
-            task.card.data.files[task.fileIndex].durationMs = durationInMs;
-
-            // Save the entire updated card data back to the database
-            await task.card.db.save(task.card.id, task.card.data);
-        } catch (e) {
-            console.error(`Failed to migrate duration for file in card ${task.card.id}:`, e);
-        }
-
-        // Process the next item on a brief timeout to keep the UI responsive
-        setTimeout(() => this._processMigrationQueue(), 100);
-    }
-    // #endregion
 
     // #region Bug's Corner
     /*

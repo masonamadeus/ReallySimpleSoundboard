@@ -306,110 +306,126 @@ export class TimerCard extends Card {
 
     }
 
-    // #region Settings Modal
+    getSettingsDOM() {
+        // 1. Clone the template
+        const template = document.getElementById('timer-settings-template');
+        const settingsDOM = template.content.cloneNode(true);
 
-     getSettingsConfig() {
-        return [
-            {
-                title: ``,
-                groups: [
-                    {
-                        type: 'title-and-color',
-                        controls: [
-                            { type: 'text', key: 'title', label: '' }
-                        ]
-                    },
-                    {
-                        type: 'radio-group', // A new group type for the mode
-                        controls: [
-                            {
-                                type: 'radio', key: 'mode', options: [
-                                    { label: 'Timer', value: 'timer' },
-                                    { label: 'Stopwatch', value: 'stopwatch' }
-                                ]
-                            }
-                        ]
-                    },
-                    {
-                        type: 'sliders',
-                        controls: [
-                            { type: 'range', key: 'minutes', label: 'Minutes', min: 0, max: 90, showValue: true, value: Math.floor(this.data.targetDurationMs / 60000) },
-                            { type: 'range', key: 'seconds', label: 'Seconds', min: 0, max: 59, showValue: true, value: Math.floor((this.data.targetDurationMs % 60000) / 1000) }
-                        ]
-                    },
-                    {
-                        type: 'checkbox-group',
-                        controls: [
-                            { type: 'checkbox', key: 'isLooping', label: 'Auto Restart' }
-                        ]
-                    }
-                ]
-            },
-            {
-                title: 'Actions',
-                groups: [
-                    {
-                        type: 'actions-list', // A simple container type
-                        controls: [
-                            // This now tells the Modal class to build the dropdowns
-                            { type: 'command-select', key: 'startAction', label: 'Start with:', itemSource: 'allCommands' },
-                            { type: 'command-select', key: 'endAction', label: 'End with:', itemSource: 'allCommands' }
-                        ]
-                    }
-                ]
-            },
-            {
-                title: 'Danger Zone',
-                groups: [
-                    {
-                        type: 'actions-row',
-                        controls: [
-                            // The onClick function is replaced with a simple 'action' string
-                            { type: 'button', label: 'Delete Timer', action: 'delete-card', class: 'danger' }
-                        ]
-                    }
-                ]
+        // 2. Grab references to the inputs (Notice we dropped the span displays)
+        const titleInput = settingsDOM.querySelector('.setting-title');
+        const modeTimerRadio = settingsDOM.querySelector('.setting-mode-timer');
+        const modeStopwatchRadio = settingsDOM.querySelector('.setting-mode-stopwatch');
+        const minutesInput = settingsDOM.querySelector('.setting-minutes');
+        const secondsInput = settingsDOM.querySelector('.setting-seconds');
+        const loopCheck = settingsDOM.querySelector('.setting-loop');
+        const startSelect = settingsDOM.querySelector('.setting-start-action');
+        const endSelect = settingsDOM.querySelector('.setting-end-action');
+
+        // 3. Populate current data
+        titleInput.value = this.data.title;
+        loopCheck.checked = this.data.isLooping;
+
+        if (this.data.mode === 'stopwatch') {
+            modeStopwatchRadio.checked = true;
+        } else {
+            modeTimerRadio.checked = true;
+        }
+
+        // Calculate and set initial minutes and seconds into the inputs
+        const currentMinutes = Math.floor(this.data.targetDurationMs / 60000);
+        const currentSeconds = Math.floor((this.data.targetDurationMs % 60000) / 1000);
+        minutesInput.value = currentMinutes;
+        secondsInput.value = currentSeconds;
+
+        // 4. Populate Command Selectors (Dropdowns)
+        const populateSelect = (selectEl, currentValue) => {
+            selectEl.add(new Option('None', '')); 
+            this.allCommands.forEach(cmd => {
+                const option = new Option(cmd.name, cmd.id);
+                selectEl.add(option);
+            });
+            selectEl.value = currentValue || '';
+        };
+
+        populateSelect(startSelect, this.data.startAction?.commandId);
+        populateSelect(endSelect, this.data.endAction?.commandId);
+
+        // 5. Attach DIRECT Event Listeners
+        titleInput.addEventListener('input', (e) => {
+            this.updateData({ title: e.target.value });
+            this.timerTitle.textContent = e.target.value;
+        });
+
+        // Time logic: Update targetDurationMs whenever either input is typed in
+        const updateTime = () => {
+            // Parse values. If they temporarily delete the number (empty string), treat as 0
+            const mins = parseInt(minutesInput.value, 10) || 0;
+            const secs = parseInt(secondsInput.value, 10) || 0;
+            
+            const newDurationMs = (mins * 60 + secs) * 1000;
+            this.updateData({ targetDurationMs: newDurationMs });
+            
+            // If not running, update the display on the card instantly behind the modal
+            if (!this.data.isRunning) {
+                this.data.targetDurationMs = newDurationMs; 
+                this.renderDisplay(); 
             }
-        ];
-    }
+        };
 
-    _handleModalAction(e) {
-        const { action } = e.detail;
-        if (action === 'delete-card') {
-            this._handleDeleteCard();
-        }
-    }
+        // Validation logic: Fix weird numbers when the user clicks away (blurs)
+        const formatAndClampTime = () => {
+            let mins = parseInt(minutesInput.value, 10) || 0;
+            let secs = parseInt(secondsInput.value, 10) || 0;
+            
+            if (mins < 0) mins = 0;
+            if (secs < 0) secs = 0;
+            if (secs > 59) secs = 59; // Stop seconds from going over 59
+            
+            minutesInput.value = mins;
+            secondsInput.value = secs;
+            
+            updateTime();
+        };
 
-    async _handleModalInput(e) {
-        const { key, value } = e.detail;
-
-        // Create a temporary data object to build the update
-        const updatedData = { ...this.data, [key]: value };
-
-        // Re-calculate targetDurationMs if minutes or seconds changed
-        if (key === 'minutes' || key === 'seconds') {
-            const minutes = key === 'minutes' ? parseInt(value, 10) : Math.floor(this.data.targetDurationMs / 60000);
-            const seconds = key === 'seconds' ? parseInt(value, 10) : Math.floor((this.data.targetDurationMs % 60000) / 1000);
-            updatedData.targetDurationMs = (minutes * 60 + seconds) * 1000;
-        }
-
-        // Re-prepare action objects if they were changed
-        if (key === 'startAction') {
-            updatedData.startAction = await this._prepareAction(value);
-        }
-        if (key === 'endAction') {
-            updatedData.endAction = await this._prepareAction(value);
-        }
-
-        // If the mode changed while the timer wasn't running, reset it.
-        if (key === 'mode' && value !== this.data.mode && !this.data.isRunning) {
-            this.reset();
-        }
+        // 'input' fires as they type for instant feedback
+        minutesInput.addEventListener('input', updateTime);
+        secondsInput.addEventListener('input', updateTime);
         
-        // Update the card's state with all the changes
-        this.updateData(updatedData);
+        // 'change' fires when they click away, perfect for clamping wild numbers
+        minutesInput.addEventListener('change', formatAndClampTime);
+        secondsInput.addEventListener('change', formatAndClampTime);
+
+        // Mode and Loop logic
+        const handleModeChange = (e) => {
+            const newMode = e.target.value;
+            this.updateData({ mode: newMode });
+            if (newMode !== this.data.mode && !this.data.isRunning) {
+                this.reset();
+            }
+        };
+        modeTimerRadio.addEventListener('change', handleModeChange);
+        modeStopwatchRadio.addEventListener('change', handleModeChange);
+        loopCheck.addEventListener('change', (e) => this.updateData({ isLooping: e.target.checked }));
+
+        // Command Actions logic
+        startSelect.addEventListener('change', async (e) => {
+            const action = await this._prepareAction(e.target.value);
+            this.updateData({ startAction: action });
+        });
+
+        endSelect.addEventListener('change', async (e) => {
+            const action = await this._prepareAction(e.target.value);
+            this.updateData({ endAction: action });
+        });
+
+        // Delete Button
+        settingsDOM.querySelector('.delete-card-btn').addEventListener('click', () => {
+            this._handleDeleteCard();
+            if (this.settingsModal) this.settingsModal.close();
+        });
+
+        return settingsDOM;
     }
 
-    //#endregion
 
 }

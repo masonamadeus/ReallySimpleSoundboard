@@ -118,59 +118,33 @@ export class Card {
 
     //#region Settings Modal
 
-    getSettingsConfig() {
-        // Return null or an empty object if a card has no settings
-        return null;
-    }
-
-    // Generic method to open settings modal, but allow child cards to overwrite if needed
-    openSettings(){
-        this._openSettingsModal();
-    }
-
-    // Generic helper method to open the settings modal
-    _handleModalInput(e) {
-        const { key, value } = e.detail;
-        if (key) {
-            this.updateData({ [key]: value });
-        }
-    }
-
-    _handleModalAction(e) {
-        // This method is intended to be overridden by child cards
-        // that have specific actions in their settings modals.
-        console.log('Modal action received by base card:', e.detail.action);
-    }
-
-
-    // Replace the existing _openSettingsModal method with this one
-    _openSettingsModal() {
-        const config = this.getSettingsConfig();
-        if (!config) {
-            console.warn(`No settings configuration found for card type: ${this.data.type}`);
+    /**
+     * Called when the settings triangle is clicked.
+     */
+    openSettings() {
+        // Ask the specific child card for its fully-wired HTML element
+        const settingsDOM = this.getSettingsDOM(); 
+        
+        if (!settingsDOM) {
+            console.warn(`No settings DOM provided for card type: ${this.data.type}`);
             return;
         }
 
         const capitalizeFirstLetter = (string) => string ? string.charAt(0).toUpperCase() + string.slice(1) : '';
         const modalTitle = `${capitalizeFirstLetter(this.data.type)} Settings`;
 
-        const modalData = { ...this.data, allCommands: this.allCommands };
-
-        // Pass this.data to the modal constructor
-        this.settingsModal = new Modal(modalTitle, config, modalData);
-        
-        // Listen for events from the modal
-        this.settingsModal.modalElement.addEventListener('modal-input', this._handleModalInput.bind(this));
-        this.settingsModal.modalElement.addEventListener('modal-action', this._handleModalAction.bind(this));
+        // Hand the DOM element to the dumb Modal shell
+        this.settingsModal = new Modal(modalTitle, settingsDOM);
     }
 
     /**
-    * Child cards MUST implement this if they have settings.
-    * @returns {object | null} The configuration object for the modal.
-    */
-    getSettingsConfig() {
-        throw new error('Child class must implement getSettingsConfig method if they have settings.');
+     * Child cards MUST override this method to return a DocumentFragment or HTMLElement
+     * containing their specific settings UI and event listeners.
+     */
+    getSettingsDOM() {
+        return null;
     }
+
 
     //#endregion
 

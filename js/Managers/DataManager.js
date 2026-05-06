@@ -99,12 +99,12 @@ export class DataManager {
             this.deleteBoard(this.manageBoardsElements.boardSelect.value)
         });
 
-        this.storageDataElements.dbExplorerContainer.addEventListener('click', () => {
-            this._handleMenuClick()
+        this.storageDataElements.dbExplorerContainer.addEventListener('click', (e) => {
+            this._handleMenuClick(e)
         });
 
-        this.manageBoardsElements.dbViewer.addEventListener('click', () => {
-            this._handleMenuClick()
+        this.manageBoardsElements.dbViewer.addEventListener('click', (e) => {
+            this._handleMenuClick(e)
         });
     }
 
@@ -353,28 +353,6 @@ export class DataManager {
         window.location.href = `?board=${boardId}`;
     }
 
-    async deleteBoard(boardId) {
-        const confirm = await MSG.confirm(`Are you sure you want to permanently delete the "${boardId}" board and all its sounds? This cannot be undone.`)
-        if (!confirm) {
-            return;
-        }
-
-        try {
-            await SoundboardDB.deleteDatabase(boardId);
-            await this.removeBoardId(boardId);
-
-            if (this.db.boardId === boardId) {
-                window.location.href = window.location.pathname;
-            } else {
-                this.openBoardSwitcher(); // Refresh the list
-            }
-
-        } catch (error) {
-            console.error(`Failed to delete board "${boardId}":`, error);
-            alert(`An error occurred while trying to delete the board: ${error.message}`);
-        }
-    }
-
     async uploadBoard(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -383,6 +361,60 @@ export class DataManager {
         reader.onload = async (e) => {
             try {
                 const data = JSON.parse(e.target.result);
+
+
+                // ================================================================
+                // LEGACY MIGRATION INTERCEPT (V1 -> V2)
+                // Detects old integer IDs or flat array layouts
+                // ================================================================
+                const isLegacy = data.some(item => 
+                    typeof item.id === 'number' || 
+                    (item.id === 'grid-layout' && Array.isArray(item.layout))
+                );
+
+                if (isLegacy) {
+                    console.log("Legacy board detected. Migrating data to V2 format...");
+                    data.forEach(item => {
+                        // 1. Migrate Sound Cards (Integer IDs -> 'sound-X')
+                        if (typeof item.id === 'number') {
+                            item.type = 'sound';
+                            item.title = item.name || `Sound ${item.id}`; // Map 'name' to 'title'
+                            delete item.name;
+                            item.id = `sound-${item.id}`;
+                        }
+                        // 2. Migrate existing Timer/Notepad Cards
+                        else if (typeof item.id === 'string') {
+                            if (item.id.startsWith('timer-')) item.type = 'timer';
+                            if (item.id.startsWith('notepad-')) item.type = 'notepad';
+                        }
+
+                        // 3. Migrate Grid Layout (Flat Array -> Tree Node Object)
+                        if (item.id === 'grid-layout' && Array.isArray(item.layout)) {
+                            const newChildren = item.layout.map(oldNode => {
+                                let newId = oldNode.id;
+                                // Fix the integer references in the layout array
+                                if (oldNode.type === 'sound' && typeof oldNode.id === 'number') {
+                                    newId = `sound-${oldNode.id}`;
+                                }
+                                return {
+                                    id: String(newId),
+                                    type: oldNode.type,
+                                    gridSpan: { column: 1, row: 1 },
+                                    children: []
+                                };
+                            });
+
+                            item.layout = {
+                                id: 'root',
+                                type: 'grid',
+                                gridSpan: { column: 1, row: 1 },
+                                children: newChildren
+                            };
+                        }
+                    });
+                }
+                // ================================================================
+                
                 const titleItem = data.find(item => item.id === 'soundboard-title');
                 const suggestedName = titleItem ? titleItem.title : `imported-board-${Date.now()}`;
                 const newBoardName = prompt("Please provide a name for this new board.", suggestedName);
