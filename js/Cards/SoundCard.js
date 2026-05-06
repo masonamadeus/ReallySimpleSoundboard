@@ -271,7 +271,7 @@ export class SoundCard extends Card {
         let lastFrameTime = performance.now();
         const dataArray = new Uint8Array(this.analyser.frequencyBinCount);
 
-        const BED_VOLUME_THRESHOLD = 110; // 0-255 (Adjust if it hides too early/late)
+        const BED_VOLUME_THRESHOLD = 90; // 0-255 (Adjust if it hides too early/late)
         const TIME_TO_WAIT_MS = 2000; 
 
         const checkLevel = () => {

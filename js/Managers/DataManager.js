@@ -30,6 +30,7 @@ export class DataManager {
             newNameInput: this.boardSwitcherModal.querySelector('#new-board-name-input'),
             uploadBtn: this.boardSwitcherModal.querySelector('#upload-board-btn'),
             uploadInput: document.getElementById('upload-board-input'),
+            downloadBtn: this.boardSwitcherModal.querySelector('#download-board-btn'),
         };
 
         // --- Storage & Data Modal Elements ---
@@ -64,6 +65,8 @@ export class DataManager {
                 this.deleteBoard(boardId);
             }
         });
+
+        this.boardSwitcherElements.downloadBtn.addEventListener('click', () => this.downloadBoard());
 
         // --- Storage & Data Modal ---
         this.storageDataModal.addEventListener('click', (event) => {
@@ -106,6 +109,121 @@ export class DataManager {
         this.manageBoardsElements.dbViewer.addEventListener('click', (e) => {
             this._handleMenuClick(e)
         });
+    }
+
+    async downloadBoard() {
+        const boardId = this.db.boardId;
+        const originalBtnText = this.boardSwitcherElements.downloadBtn.textContent;
+        
+        try {
+            this.boardSwitcherElements.downloadBtn.textContent = "Packaging...";
+            this.boardSwitcherElements.downloadBtn.disabled = true;
+
+            // 1. Get ALL data from the current board's database
+            const allData = await SoundboardDB.getDataFromBoard(boardId);
+
+            // 2. Prepare the data for JSON (convert binary to base64)
+            const exportData = allData.map(item => {
+                if (item.type === 'sound' && item.files && item.files.length > 0) {
+                    const convertedFiles = item.files.map(file => ({
+                        ...file,
+                        // Convert the binary ArrayBuffer to a string for JSON storage
+                        arrayBuffer: arrayBufferToBase64(file.arrayBuffer)
+                    }));
+                    return { ...item, files: convertedFiles };
+                }
+                return item;
+            });
+
+            // 3. Trigger the file download
+            const json = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([json], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            
+            // Generate a nice filename
+            const titleItem = allData.find(d => d.id === 'soundboard-title');
+            const fileName = titleItem ? slugify(titleItem.title) : `board-${boardId}`;
+            
+            a.href = url;
+            a.download = `RSS_Board_${fileName}_${new Date().toISOString().slice(0,10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+
+        } catch (err) {
+            console.error("Export failed:", err);
+            alert("Failed to export board. See console for details.");
+        } finally {
+            this.boardSwitcherElements.downloadBtn.textContent = originalBtnText;
+            this.boardSwitcherElements.downloadBtn.disabled = false;
+        }
+    }
+
+    // uploadBoard remains largely correct but ensure it redirects to the new board URL correctly
+    async uploadBoard(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+
+                // Legacy Migration (Simplified for brevity, matches your previous version)
+                const isLegacy = data.some(item => typeof item.id === 'number');
+                if (isLegacy) {
+                    data.forEach(item => {
+                        if (typeof item.id === 'number') {
+                            item.type = 'sound';
+                            item.title = item.name || `Sound ${item.id}`;
+                            item.id = `sound-${item.id}`;
+                        }
+                    });
+                }
+                
+                const titleItem = data.find(item => item.id === 'soundboard-title');
+                const suggestedName = titleItem ? titleItem.title : `imported-${Date.now()}`;
+                const newBoardName = prompt("Name for imported board:", suggestedName);
+
+                if (!newBoardName) return;
+
+                const newBoardId = slugify(newBoardName);
+                const existingBoards = await this.getBoardList();
+                if (existingBoards.includes(newBoardId)) {
+                    alert("A board with that name already exists.");
+                    return;
+                }
+
+                // Deserialization: Convert Base64 back to ArrayBuffers
+                const deserializedData = data.map(item => {
+                    if (item.files && item.files.length > 0) {
+                        const deserializedFiles = item.files.map(file => ({
+                            ...file,
+                            arrayBuffer: base64ToArrayBuffer(file.arrayBuffer)
+                        }));
+                        return { ...item, files: deserializedFiles };
+                    }
+                    return item;
+                });
+
+                // Save to new DB
+                const newDb = new SoundboardDB(newBoardId);
+                await newDb.openDB();
+                for (const item of deserializedData) {
+                    await newDb.save(item.id, item);
+                }
+
+                await this.addBoardId(newBoardId);
+                window.location.href = `?board=${newBoardId}`;
+
+            } catch (err) {
+                alert("Upload failed: Invalid board file.");
+                console.error(err);
+            }
+        };
+        reader.readAsText(file);
     }
 
     _handleMenuClick = (e) => {
