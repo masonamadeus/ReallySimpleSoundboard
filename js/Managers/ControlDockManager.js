@@ -1,5 +1,6 @@
 import { MSG } from '../Core/MSG.js';
 import { store } from '../Core/StateStore.js';
+import { getOverlayUrl } from '../Core/helper-functions.js';
 export class ControlDockManager {
     /**
      * Manages the new three-card control dock at the bottom of the screen.
@@ -40,6 +41,7 @@ export class ControlDockManager {
             storageBtn: document.getElementById('storage-data-btn'),
             manageBoardsBtn: document.getElementById('manage-boards-btn'),
             newNameInput: document.getElementById('new-board-name-input'),
+            copyOverlayBtn: document.getElementById('copy-overlay-btn'),
         }
     }
 
@@ -51,6 +53,15 @@ export class ControlDockManager {
         this.elements.rearrangeBtn.addEventListener('click', () => MSG.say(MSG.ACTIONS.REQUEST_TOGGLE_REARRANGE_MODE));
         this.elements.cosmeticsBtn.addEventListener('click', () => MSG.say(MSG.ACTIONS.REQUEST_OPEN_THEME_MANAGER));
 
+
+        this.elements.copyOverlayBtn.addEventListener('click', () => {
+            const url = getOverlayUrl();
+            navigator.clipboard.writeText(url);
+
+            const originalText = this.elements.copyOverlayBtn.textContent;
+            this.elements.copyOverlayBtn.textContent = "Copied to Clipboard!";
+            setTimeout(() => this.elements.copyOverlayBtn.textContent = originalText, 2000);
+        });
 
         const addCardDock = document.getElementById('add-card-dock');
 

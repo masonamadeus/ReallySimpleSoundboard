@@ -79,6 +79,27 @@ export function loadGoogleFonts(fontNames) {
     document.head.appendChild(link);
 };
 
+export function getPersistentUserId() {
+    let userId = localStorage.getItem('bmrss_user_id');
+    if (!userId) {
+        // Generate a random unique ID if it doesn't exist
+        userId = 'user-' + Math.random().toString(36).substr(2, 9) + '-' + Date.now().toString(36);
+        localStorage.setItem('bmrss_user_id', userId);
+    }
+    return userId;
+}
+
+export function getOverlayUrl() {
+    let userHash = localStorage.getItem('bmrss_user_hash');
+    if (!userHash) {
+        userHash = Math.random().toString(36).substring(2, 10);
+        localStorage.setItem('bmrss_user_hash', userHash);
+    }
+    // Returns the full URL with the unique hash as a parameter
+    const baseUrl = window.location.origin + window.location.pathname.replace('index.html', '');
+    return `${baseUrl}overlay.html?u=${userHash}`;
+}
+
 
 export function getAdvancedContrastColor(bgHex) {
     // Helper function to convert Hex to RGB

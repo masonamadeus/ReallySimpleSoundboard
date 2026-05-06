@@ -122,34 +122,42 @@ function stopOverlay() {
     }, 600); // 600ms safely covers the 0.55s CSS transition
 }
 
-const peer = new Peer('bmrss-obs-overlay-v1');
+// Grab the hash from the URL
+const urlParams = new URLSearchParams(window.location.search);
+const userHash = urlParams.get('u');
 
-peer.on('open', id => {
-    console.log('[Overlay] Ready:', id);
-});
+// 1. Initialize Peer with a RANDOM ID (No more collisions!)
+const peer = new Peer(); 
+let soundboardConn = null;
 
-peer.on('connection', conn => {
-    console.log('[Overlay] Connected');
+if (!userHash) {
+    document.body.innerHTML = "<h1 style='color:white; text-align:center;'>Error: No User Hash. Use the link from the Soundboard!</h1>";
+} else {
+    // 2. The Connection Loop: Keep trying to find the Soundboard
+    function connectToSoundboard() {
+        console.log("Searching for Soundboard broadcast...");
+        const conn = peer.connect(`bmrss-host-${userHash}`);
 
-    conn.on('data', data => {
-        console.log('[Overlay] Incoming:', data);
+        conn.on('open', () => {
+            console.log("Connected to Soundboard Broadcast!");
+            soundboardConn = conn;
+        });
 
-        switch (data.action) {
-            case 'trigger_overlay':
-                triggerOverlay(data);
-                break;
+        conn.on('data', (data) => {
+            if (data.action === 'trigger_overlay') triggerOverlay(data);
+            if (data.action === 'stop_overlay') stopOverlay();
+        });
 
-            case 'stop_overlay':
-                stopOverlay();
-                break;
-        }
-    });
+        conn.on('close', () => {
+            console.log("Connection lost. Retrying...");
+            setTimeout(connectToSoundboard, 3000); // Retry in 3 seconds
+        });
 
-    conn.on('close', () => {
-        console.log('[Overlay] Disconnected');
-    });
-});
+        conn.on('error', (err) => {
+            console.log("Soundboard not found yet. Retrying...");
+            setTimeout(connectToSoundboard, 3000);
+        });
+    }
 
-peer.on('error', err => {
-    console.error('[Overlay] Peer Error:', err);
-});
+    peer.on('open', connectToSoundboard);
+}

@@ -4,19 +4,38 @@ import { Card } from './BaseCard.js';
 import { MSG } from '../Core/MSG.js';
 import { Modal } from '../Core/Modal.js';
 import {store} from '../Core/StateStore.js';
+import { getOverlayUrl } from '../Core/helper-functions.js';
 
-// Setup a global WebRTC peer to talk to OBS
-const peer = new Peer();
-let obsConnection = null;
+const userHash = new URL(getOverlayUrl()).searchParams.get('u');
+const peer = new Peer(`bmrss-host-${userHash}`); // The Soundboard is the Master Host
+const activeOverlays = new Set(); // Stores all connected overlay instances
 
-peer.on('open', () => {
-    // Connect to the specific ID we will assign to the OBS overlay
-    obsConnection = peer.connect('bmrss-obs-overlay-v1');
-    
-    obsConnection.on('open', () => {
-        console.log("Connected to OBS Overlay!");
-    });
+peer.on('open', (id) => {
+    console.log(`Soundboard Host Online: ${id}`);
 });
+
+// Listen for Overlays "calling" the Soundboard
+peer.on('connection', (conn) => {
+    console.log("New Overlay joined the broadcast!");
+    activeOverlays.add(conn);
+
+    // Remove it from the list if it closes
+    conn.on('close', () => {
+        activeOverlays.delete(conn);
+        console.log("Overlay left the broadcast.");
+    });
+    
+    conn.on('error', () => activeOverlays.delete(conn));
+});
+
+// Helper function to beam data to ALL connected overlays
+function broadcastToOverlays(payload) {
+    activeOverlays.forEach(conn => {
+        if (conn.open) {
+            conn.send(payload);
+        }
+    });
+}
 
 const globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -272,10 +291,7 @@ export class SoundCard extends Card {
                 silenceTimer += deltaTime;
                 if (silenceTimer >= TIME_TO_WAIT_MS) {
                     
-                    // IT'S QUIET! TELL OBS TO HIDE THE GRAPHIC!
-                    if (obsConnection && obsConnection.open) {
-                        obsConnection.send({ action: 'stop_overlay', cardId: this.id });
-                    }
+                    broadcastToOverlays({ action: 'stop_overlay', cardId: this.id });
                     this.isMonitoringOverlay = false; 
                     return; 
                 }
@@ -403,8 +419,8 @@ export class SoundCard extends Card {
         if (!fileData) return;
 
         // 1. Instantly beam the audio binary, color, and TITLE to OBS via WebRTC
-        if (this.data.showOverlay && obsConnection && obsConnection.open) {
-            obsConnection.send({
+        if (this.data.showOverlay) {
+            broadcastToOverlays({
                 action: 'trigger_overlay',
                 color: this.data.color, 
                 cardTitle: this.data.title, 
@@ -452,13 +468,11 @@ export class SoundCard extends Card {
 
         clearTimeout(this.duckStartTimeout);
 
-        // Tell OBS to shrink away (Your existing code already does this nicely!)
-        if (obsConnection && obsConnection.open) {
-            obsConnection.send({
-                action: 'stop_overlay',
-                cardId: this.id
-            });
-        }
+        // Tell OBS to shrink away
+        broadcastToOverlays({
+            action: 'stop_overlay',
+            cardId: this.id
+        });
 
         if (this.data.priority && this.priorityActive) {
             this.priorityActive = false; 
