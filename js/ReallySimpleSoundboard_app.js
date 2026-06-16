@@ -5,6 +5,7 @@ import { ThemeManager } from './Managers/ThemeManager.js';
 import { GridManager } from './Managers/GridManager.js';
 import { ControlDockManager } from './Managers/ControlDockManager.js';
 import { DataManager } from './Managers/DataManager.js';
+import { BroadcastManager } from './Managers/BroadcastManager.js';
 import { store } from './Core/StateStore.js';
 
 // EVENTUALLY NEED TO MAKE IT SO THERE DO NOT NEED TO BE EXPLICIT REFS TO IMPORT CARD TYPES
@@ -81,6 +82,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const gridManager = new GridManager();
     const controlDockManager = new ControlDockManager();
     const dataManager = new DataManager();
+    const broadcastManager = new BroadcastManager();
 
     // 2. Set the SoundboardManager's dependencies so it knows about the UI managers
     soundboardController.setDependencies({
@@ -92,6 +94,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // 3. Initialize all UI managers so they are ready to listen for events
+    await broadcastManager.init();
+    
     await themeManager.init(
         db,
         defaultDb,

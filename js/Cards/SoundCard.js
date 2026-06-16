@@ -4,38 +4,7 @@ import { Card } from './BaseCard.js';
 import { MSG } from '../Core/MSG.js';
 import { Modal } from '../Core/Modal.js';
 import {store} from '../Core/StateStore.js';
-import { getOverlayUrl } from '../Core/helper-functions.js';
 
-const userHash = new URL(getOverlayUrl()).searchParams.get('u');
-const peer = new Peer(`bmrss-host-${userHash}`); // The Soundboard is the Master Host
-const activeOverlays = new Set(); // Stores all connected overlay instances
-
-peer.on('open', (id) => {
-    console.log(`Soundboard Host Online: ${id}`);
-});
-
-// Listen for Overlays "calling" the Soundboard
-peer.on('connection', (conn) => {
-    console.log("New Overlay joined the broadcast!");
-    activeOverlays.add(conn);
-
-    // Remove it from the list if it closes
-    conn.on('close', () => {
-        activeOverlays.delete(conn);
-        console.log("Overlay left the broadcast.");
-    });
-    
-    conn.on('error', () => activeOverlays.delete(conn));
-});
-
-// Helper function to beam data to ALL connected overlays
-function broadcastToOverlays(payload) {
-    activeOverlays.forEach(conn => {
-        if (conn.open) {
-            conn.send(payload);
-        }
-    });
-}
 
 const globalAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
@@ -291,7 +260,7 @@ export class SoundCard extends Card {
                 silenceTimer += deltaTime;
                 if (silenceTimer >= TIME_TO_WAIT_MS) {
                     
-                    broadcastToOverlays({ action: 'stop_overlay', cardId: this.id });
+                    MSG.say('overlay:stop', { cardId: this.id });
                     this.isMonitoringOverlay = false; 
                     return; 
                 }
@@ -303,33 +272,6 @@ export class SoundCard extends Card {
         };
         
         requestAnimationFrame(checkLevel);
-    }
-
- 
-
-    // Helper to render the file list inside the settings modal
-    _renderSettingsFileList(listElement) {
-        listElement.innerHTML = ''; // Clear it out
-        if (this.data.files.length === 0) {
-            listElement.innerHTML = `<li><small>No audio files yet.</small></li>`;
-            return;
-        }
-
-        this.data.files.forEach((file, index) => {
-            const li = document.createElement('li');
-            li.innerHTML = `
-            <span>${file.fileName}</span>
-            <button class="danger remove-file-btn" style="padding: 0.25rem 0.5rem; font-size: 0.8rem;">Remove</button>
-        `;
-
-            // Attach listener directly to this specific remove button
-            li.querySelector('.remove-file-btn').addEventListener('click', () => {
-                this._handleRemoveFile(index);
-                this._renderSettingsFileList(listElement); // Re-render list after removal
-            });
-
-            listElement.appendChild(li);
-        });
     }
 
 
@@ -420,8 +362,7 @@ export class SoundCard extends Card {
 
         // 1. Instantly beam the audio binary, color, and TITLE to OBS via WebRTC
         if (this.data.showOverlay) {
-            broadcastToOverlays({
-                action: 'trigger_overlay',
+            MSG.say('overlay:trigger', {
                 color: this.data.color, 
                 cardTitle: this.data.title, 
                 audioBuffer: fileData.arrayBuffer 
@@ -469,10 +410,7 @@ export class SoundCard extends Card {
         clearTimeout(this.duckStartTimeout);
 
         // Tell OBS to shrink away
-        broadcastToOverlays({
-            action: 'stop_overlay',
-            cardId: this.id
-        });
+        MSG.say('overlay:stop', { cardId: this.id });
 
         if (this.data.priority && this.priorityActive) {
             this.priorityActive = false; 

@@ -153,11 +153,16 @@ if (!userHash) {
             setTimeout(connectToSoundboard, 3000); // Retry in 3 seconds
         });
 
-        conn.on('error', (err) => {
-            console.log("Soundboard not found yet. Retrying...");
-            setTimeout(connectToSoundboard, 3000);
-        });
     }
 
     peer.on('open', connectToSoundboard);
+
+    peer.on('error', (err) => {
+        if (err.type === 'peer-unavailable') {
+            console.log("Soundboard not found yet. Retrying in 3 seconds...");
+            setTimeout(connectToSoundboard, 3000);
+        } else {
+            console.error("PeerJS Error:", err);
+        }
+    });
 }
